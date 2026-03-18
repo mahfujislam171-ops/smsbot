@@ -5,7 +5,7 @@ const app = express();
 app.use(express.json());
 
 // ===== CONFIG =====
-const TOKEN = "8651056162:AAEwp5062i3fpRpvLXuyuhfpn7hjUuhJG4I";
+const TOKEN = "8651056162:AAGfdgiwy44bL7jc2hkzKNCGWqijoGY-Jfc";
 const URL = `https://api.telegram.org/bot${TOKEN}`;
 
 const ADMIN_PASSWORD = "794082";
