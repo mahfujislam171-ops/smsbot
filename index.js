@@ -43,17 +43,8 @@ app.post("/", (req, res) => {
 
   if (!state[chatId]) state[chatId] = {};
 
-  // ===== START =====
-  if (text === "/start") {
-    reset(chatId);
-    return send(chatId, "মাহফুজের কাস্টম এসএমএস এ আপনাকে স্বাগতম 👇", [
-      ["Admin Login"],
-      ["User Login"]
-    ]);
-  }
-
-  // ===== BACK =====
-  if (text === "Back") {
+  // ===== GLOBAL RESET (FIX BUG) =====
+  if (text === "/start" || text === "Back") {
     reset(chatId);
     return send(chatId, "মাহফুজের কাস্টম এসএমএস এ আপনাকে স্বাগতম 👇", [
       ["Admin Login"],
@@ -227,9 +218,11 @@ app.post("/", (req, res) => {
   if (state[chatId].step === "sms_msg") {
     let u = users[state[chatId].user];
 
+    if (!u) return send(chatId, "❌ User error");
+
     if (u.coin <= 0) return send(chatId, "❌ No Coin");
 
-    axios.get(`https://mahirvai.com/sms.php?key=AM–MRXRPSh2PU&number=${state[chatId].number}&msg=${encodeURIComponent(text)}`)
+    axios.get(`https://mahirvai.com/sms.php?key=AM-MRXRPSh2PU&number=${state[chatId].number}&msg=${encodeURIComponent(text)}`)
     .then(() => {
       u.coin--;
       state[chatId] = { user: state[chatId].user };
