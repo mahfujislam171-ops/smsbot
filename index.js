@@ -11,6 +11,11 @@ let state = {};
 let users = {};
 let lastUpdateId = 0;
 
+// ===== ROOT FIX (IMPORTANT) =====
+app.get("/", (req, res) => {
+  res.send("Bot Running ✅");
+});
+
 // ===== SEND =====
 function send(chatId, text, keyboard) {
   axios.post(`${API}/sendMessage`, {
@@ -43,7 +48,7 @@ app.post("/", (req, res) => {
 
   if (!state[chatId]) state[chatId] = {};
 
-  // ===== GLOBAL RESET (FIX BUG) =====
+  // ===== GLOBAL RESET =====
   if (text === "/start" || text === "Back") {
     reset(chatId);
     return send(chatId, "মাহফুজের কাস্টম এসএমএস এ আপনাকে স্বাগতম 👇", [
@@ -219,7 +224,6 @@ app.post("/", (req, res) => {
     let u = users[state[chatId].user];
 
     if (!u) return send(chatId, "❌ User error");
-
     if (u.coin <= 0) return send(chatId, "❌ No Coin");
 
     axios.get(`https://mahirvai.com/sms.php?key=AM-MRXRPSh2PU&number=${state[chatId].number}&msg=${encodeURIComponent(text)}`)
