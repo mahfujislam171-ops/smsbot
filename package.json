@@ -1,7 +1,6 @@
 {
   "name": "smsbot",
   "version": "1.0.0",
-  "description": "Telegram SMS Bot",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
