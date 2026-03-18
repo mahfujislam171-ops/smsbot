@@ -4,7 +4,7 @@ const axios = require("axios");
 const app = express();
 app.use(express.json());
 
-const TOKEN = "8651056162:AAFoTNM6DHlUJv4CLhR8GKF_62FWLASFImk";
+const TOKEN = "8651056162:AAFTBhrkoNg5Mpg-cIYj-zSmf6S5LBISgZM";
 const API = `https://api.telegram.org/bot${TOKEN}`;
 
 let state = {};
@@ -32,7 +32,6 @@ app.post("/", (req, res) => {
   res.sendStatus(200);
 
   const update = req.body;
-
   if (update.update_id <= lastUpdateId) return;
   lastUpdateId = update.update_id;
 
