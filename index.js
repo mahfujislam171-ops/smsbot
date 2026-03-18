@@ -4,7 +4,7 @@ const app = express();
 
 app.use(express.json());
 
-const TOKEN = "8651056162:AAFkb1lRavN9v66ix3_I8gWQqUCvKG5322I";
+const TOKEN = "8651056162:AAFoTNM6DHlUJv4CLhR8GKF_62FWLASFImk";
 const API = `https://api.telegram.org/bot${TOKEN}`;
 
 const ADMIN_PASS = "794082";
