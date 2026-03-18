@@ -1,209 +1,183 @@
 const express = require("express");
 const axios = require("axios");
-const app = express();
 
+const app = express();
 app.use(express.json());
 
 const TOKEN = "8651056162:AAFoTNM6DHlUJv4CLhR8GKF_62FWLASFImk";
 const API = `https://api.telegram.org/bot${TOKEN}`;
 
-const ADMIN_PASS = "794082";
+// ====== DATA ======
+let state = {};
+let users = {}; // username -> {password, coin}
 
-// ===== DATABASE =====
-let db = {
-  users: {},
-  sessions: {}
-};
-
-// ===== KEEP ALIVE =====
-app.get("/", (req, res) => {
-  res.send("Bot Running...");
-});
-
-// ===== SEND MSG =====
-async function send(chatId, text, keyboard = null) {
-  await axios.post(`${API}/sendMessage`, {
+// ====== SEND MSG ======
+function send(chatId, text, keyboard = null) {
+  return axios.post(`${API}/sendMessage`, {
     chat_id: chatId,
     text,
     reply_markup: keyboard
+      ? { keyboard, resize_keyboard: true }
+      : undefined,
   });
 }
 
-// ===== KEYBOARDS =====
-const mainMenu = {
-  keyboard: [["Admin Login"], ["User Login"]],
-  resize_keyboard: true
-};
+// ====== WEBHOOK ======
+app.post("/", (req, res) => {
+  res.sendStatus(200); // ⚡ FAST reply
 
-const adminMenu = {
-  keyboard: [["User Add"], ["User List"], ["Back"]],
-  resize_keyboard: true
-};
+  const update = req.body;
+  if (!update.message) return;
 
-const userMenu = {
-  keyboard: [["📩 Send SMS"], ["💰 Balance"], ["🔙 Back"]],
-  resize_keyboard: true
-};
+  const chatId = update.message.chat.id;
+  const text = update.message.text;
 
-// ===== WEBHOOK =====
-app.post("/", async (req, res) => {
-  const msg = req.body.message;
-  if (!msg) return res.sendStatus(200);
-
-  const chatId = msg.chat.id;
-  const text = msg.text;
-
-  let session = db.sessions[chatId] || {};
+  if (!state[chatId]) state[chatId] = {};
 
   // ===== START =====
   if (text === "/start") {
-    db.sessions[chatId] = {};
-    return send(chatId, "Welcome 👇", mainMenu);
+    state[chatId] = {};
+    return send(chatId, "Welcome 👇", [
+      ["Admin Login"],
+      ["User Login"],
+    ]);
   }
 
   // ===== ADMIN LOGIN =====
   if (text === "Admin Login") {
-    db.sessions[chatId] = { step: "admin_pass" };
-    return send(chatId, "Enter Admin Password:");
+    state[chatId].step = "admin_pass";
+    return send(chatId, "🔑 Enter Admin Password:");
   }
 
-  if (session.step === "admin_pass") {
-    if (text === ADMIN_PASS) {
-      db.sessions[chatId] = { step: "admin_panel" };
-      return send(chatId, "Admin Panel 👇", adminMenu);
+  if (state[chatId].step === "admin_pass") {
+    if (text === "794082") {
+      state[chatId].admin = true;
+      state[chatId].step = null;
+
+      return send(chatId, "✅ Admin Panel", [
+        ["User Add", "User List"],
+        ["Back"],
+      ]);
     } else {
-      return send(chatId, "Wrong Password ❌");
+      return send(chatId, "❌ Wrong Password");
     }
   }
 
   // ===== USER ADD =====
-  if (text === "User Add") {
-    db.sessions[chatId] = { step: "add_id" };
-    return send(chatId, "Enter User ID:");
+  if (text === "User Add" && state[chatId].admin) {
+    state[chatId].step = "add_user";
+    return send(chatId, "Enter username:");
   }
 
-  if (session.step === "add_id") {
-    db.sessions[chatId] = { step: "add_pass", id: text };
-    return send(chatId, "Enter Password:");
+  if (state[chatId].step === "add_user") {
+    state[chatId].newUser = text;
+    state[chatId].step = "add_pass";
+    return send(chatId, "Enter password:");
   }
 
-  if (session.step === "add_pass") {
-    db.users[session.id] = {
-      pass: text,
-      coin: 0
+  if (state[chatId].step === "add_pass") {
+    users[state[chatId].newUser] = {
+      password: text,
+      coin: 5,
     };
-    db.sessions[chatId] = { step: "admin_panel" };
-    return send(chatId, "User Added ✅", adminMenu);
+    state[chatId].step = null;
+
+    return send(chatId, "✅ User created", [
+      ["User Add", "User List"],
+      ["Back"],
+    ]);
   }
 
   // ===== USER LIST =====
-  if (text === "User List") {
-    let list = Object.keys(db.users)
-      .map(u => `${u} | Coin: ${db.users[u].coin}`)
+  if (text === "User List" && state[chatId].admin) {
+    let list = Object.keys(users)
+      .map((u) => `${u} (coin: ${users[u].coin})`)
       .join("\n");
 
-    if (!list) list = "No users";
-
-    return send(chatId, list + "\n\nType user id:");
-  }
-
-  if (db.users[text] && session.step === "admin_panel") {
-    db.sessions[chatId] = { step: "manage_user", id: text };
-
-    return send(chatId, "Select:", {
-      keyboard: [["Add Coin"], ["Delete User"], ["Back"]],
-      resize_keyboard: true
-    });
-  }
-
-  if (text === "Add Coin" && session.step === "manage_user") {
-    db.sessions[chatId].step = "coin_amount";
-    return send(chatId, "Enter coin:");
-  }
-
-  if (session.step === "coin_amount") {
-    db.users[session.id].coin += parseInt(text);
-    db.sessions[chatId] = { step: "admin_panel" };
-    return send(chatId, "Coin Added ✅", adminMenu);
-  }
-
-  if (text === "Delete User" && session.step === "manage_user") {
-    delete db.users[session.id];
-    db.sessions[chatId] = { step: "admin_panel" };
-    return send(chatId, "Deleted ✅", adminMenu);
+    return send(chatId, list || "No users");
   }
 
   // ===== USER LOGIN =====
   if (text === "User Login") {
-    db.sessions[chatId] = { step: "login_id" };
+    state[chatId].step = "user_id";
     return send(chatId, "Enter User ID:");
   }
 
-  if (session.step === "login_id") {
-    db.sessions[chatId] = { step: "login_pass", id: text };
+  if (state[chatId].step === "user_id") {
+    state[chatId].loginUser = text;
+    state[chatId].step = "user_pass";
     return send(chatId, "Enter Password:");
   }
 
-  if (session.step === "login_pass") {
-    let user = db.users[session.id];
+  if (state[chatId].step === "user_pass") {
+    let u = users[state[chatId].loginUser];
 
-    if (user && user.pass === text) {
-      db.sessions[chatId] = { step: "user_panel", user: session.id };
-      return send(chatId, "User Panel 👇", userMenu);
+    if (u && u.password === text) {
+      state[chatId].user = state[chatId].loginUser;
+      state[chatId].step = null;
+
+      return send(chatId, "✅ User Panel", [
+        ["Send SMS", "Balance"],
+        ["Back"],
+      ]);
     } else {
-      return send(chatId, "Login Failed ❌");
+      return send(chatId, "❌ Login Failed");
     }
   }
 
   // ===== BALANCE =====
-  if (text === "💰 Balance") {
-    let u = db.sessions[chatId].user;
-    return send(chatId, `Balance: ${db.users[u].coin}`);
+  if (text === "Balance" && state[chatId].user) {
+    let u = users[state[chatId].user];
+    return send(chatId, `💰 Coin: ${u.coin}`);
   }
 
-  // ===== SEND SMS =====
-  if (text === "📩 Send SMS") {
-    db.sessions[chatId].step = "sms_number";
-    return send(chatId, "Enter Number:");
+  // ===== SMS =====
+  if (text === "Send SMS" && state[chatId].user) {
+    state[chatId].step = "sms_number";
+    return send(chatId, "Enter number:");
   }
 
-  if (session.step === "sms_number") {
-    db.sessions[chatId].number = text;
-    db.sessions[chatId].step = "sms_text";
-    return send(chatId, "Enter Message:");
+  if (state[chatId].step === "sms_number") {
+    state[chatId].number = text;
+    state[chatId].step = "sms_msg";
+    return send(chatId, "Enter message:");
   }
 
-  if (session.step === "sms_text") {
-    let u = db.sessions[chatId].user;
+  if (state[chatId].step === "sms_msg") {
+    let u = users[state[chatId].user];
 
-    if (db.users[u].coin <= 0) {
-      return send(chatId, "No Balance ❌");
+    if (u.coin <= 0) {
+      return send(chatId, "❌ No coin");
     }
 
-    let number = db.sessions[chatId].number;
-    let message = text;
+    let number = state[chatId].number;
+    let msg = text;
 
-    try {
-      // ===== REAL API =====
-      await axios.get(`https://mahirvai.com/sms.php?key=AM–MRXRPSh2PU&number=${number}&msg=${encodeURIComponent(message)}`);
+    // ===== SMS API =====
+    axios.get(
+      `https://mahirvai.com/sms.php?key=AM–MRXRPSh2PU&number=${number}&msg=${encodeURIComponent(msg)}`
+    );
 
-      db.users[u].coin -= 1;
+    u.coin -= 1;
+    state[chatId].step = null;
 
-      return send(chatId, "SMS Sent ✅", userMenu);
-    } catch (e) {
-      return send(chatId, "SMS Failed ❌");
-    }
+    return send(chatId, "✅ SMS Sent", [
+      ["Send SMS", "Balance"],
+      ["Back"],
+    ]);
   }
 
   // ===== BACK =====
-  if (text === "Back" || text === "🔙 Back") {
-    db.sessions[chatId] = {};
-    return send(chatId, "Main Menu", mainMenu);
+  if (text === "Back") {
+    state[chatId] = {};
+    return send(chatId, "Welcome 👇", [
+      ["Admin Login"],
+      ["User Login"],
+    ]);
   }
-
-  res.sendStatus(200);
 });
 
 // ===== SERVER =====
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Running..."));
+app.listen(process.env.PORT || 3000, () =>
+  console.log("Server running")
+);
