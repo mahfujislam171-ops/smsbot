@@ -56,14 +56,24 @@ app.post("/", (req, res) => {
     ]);
   }
 
-  // ===== ADMIN LOGIN =====
+  // ===== ADMIN LOGIN CLICK =====
   if (text === "Admin Login") {
     reset(chatId);
-    state[chatId].step = "admin_pass";
+    state[chatId].mode = "admin";
+    state[chatId].step = "pass";
     return send(chatId, "🔑 Enter Admin Password:");
   }
 
-  if (state[chatId].step === "admin_pass") {
+  // ===== USER LOGIN CLICK =====
+  if (text === "User Login") {
+    reset(chatId);
+    state[chatId].mode = "user";
+    state[chatId].step = "id";
+    return send(chatId, "Enter User ID:");
+  }
+
+  // ===== ADMIN PASSWORD =====
+  if (state[chatId].mode === "admin" && state[chatId].step === "pass") {
     if (text === "794082") {
       state[chatId] = { admin: true };
       return send(chatId, "✅ Admin Panel", [
@@ -76,24 +86,19 @@ app.post("/", (req, res) => {
     }
   }
 
-  // ===== USER LOGIN =====
-  if (text === "User Login") {
-    reset(chatId);
-    state[chatId].step = "user_id";
-    return send(chatId, "Enter User ID:");
-  }
-
-  if (state[chatId].step === "user_id") {
+  // ===== USER LOGIN FLOW =====
+  if (state[chatId].mode === "user" && state[chatId].step === "id") {
     state[chatId].loginUser = text;
-    state[chatId].step = "user_pass";
+    state[chatId].step = "pass";
     return send(chatId, "Enter Password:");
   }
 
-  if (state[chatId].step === "user_pass") {
+  if (state[chatId].mode === "user" && state[chatId].step === "pass") {
     let u = users[state[chatId].loginUser];
 
     if (u && u.password === text) {
       state[chatId] = { user: state[chatId].loginUser };
+
       return send(chatId, "✅ User Panel", [
         ["Send SMS", "Balance"],
         ["Back"]
@@ -146,54 +151,6 @@ app.post("/", (req, res) => {
     state[chatId] = { admin: true };
 
     return send(chatId, "✅ User Created", [
-      ["User Add", "User List"],
-      ["Coin Add", "Coin Edit"],
-      ["Back"]
-    ]);
-  }
-
-  // ===== COIN ADD =====
-  if (state[chatId].step === "coin_add_user") {
-    state[chatId].target = text;
-    state[chatId].step = "coin_add_amount";
-    return send(chatId, "Enter amount:");
-  }
-
-  if (state[chatId].step === "coin_add_amount") {
-    let u = users[state[chatId].target];
-    if (!u) return send(chatId, "❌ User not found");
-
-    let amount = parseInt(text);
-    if (isNaN(amount)) return send(chatId, "❌ Invalid");
-
-    u.coin += amount;
-    state[chatId] = { admin: true };
-
-    return send(chatId, `✅ Coin Added (${u.coin})`, [
-      ["User Add", "User List"],
-      ["Coin Add", "Coin Edit"],
-      ["Back"]
-    ]);
-  }
-
-  // ===== COIN EDIT =====
-  if (state[chatId].step === "coin_edit_user") {
-    state[chatId].target = text;
-    state[chatId].step = "coin_edit_amount";
-    return send(chatId, "Enter new coin:");
-  }
-
-  if (state[chatId].step === "coin_edit_amount") {
-    let u = users[state[chatId].target];
-    if (!u) return send(chatId, "❌ User not found");
-
-    let amount = parseInt(text);
-    if (isNaN(amount)) return send(chatId, "❌ Invalid");
-
-    u.coin = amount;
-    state[chatId] = { admin: true };
-
-    return send(chatId, `✅ Coin Updated (${u.coin})`, [
       ["User Add", "User List"],
       ["Coin Add", "Coin Edit"],
       ["Back"]
