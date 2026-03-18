@@ -21,7 +21,7 @@ function send(chatId, text, keyboard) {
   }).catch(() => {});
 }
 
-// ===== RESET FUNCTION =====
+// ===== RESET =====
 function reset(chatId) {
   state[chatId] = {};
 }
@@ -30,11 +30,11 @@ function reset(chatId) {
 app.post("/", (req, res) => {
   res.sendStatus(200);
 
-  const update = req.body;
-  if (!update.message) return;
+  const msg = req.body.message;
+  if (!msg) return;
 
-  const chatId = update.message.chat.id;
-  const text = update.message.text;
+  const chatId = msg.chat.id;
+  const text = msg.text;
 
   if (!state[chatId]) state[chatId] = {};
 
@@ -58,7 +58,8 @@ app.post("/", (req, res) => {
 
   // ===== ADMIN LOGIN =====
   if (text === "Admin Login") {
-    state[chatId] = { step: "admin_pass" };
+    reset(chatId);
+    state[chatId].step = "admin_pass";
     return send(chatId, "🔑 Enter Admin Password:");
   }
 
@@ -75,7 +76,34 @@ app.post("/", (req, res) => {
     }
   }
 
-  // ===== ADMIN PANEL BUTTON FIX =====
+  // ===== USER LOGIN =====
+  if (text === "User Login") {
+    reset(chatId);
+    state[chatId].step = "user_id";
+    return send(chatId, "Enter User ID:");
+  }
+
+  if (state[chatId].step === "user_id") {
+    state[chatId].loginUser = text;
+    state[chatId].step = "user_pass";
+    return send(chatId, "Enter Password:");
+  }
+
+  if (state[chatId].step === "user_pass") {
+    let u = users[state[chatId].loginUser];
+
+    if (u && u.password === text) {
+      state[chatId] = { user: state[chatId].loginUser };
+      return send(chatId, "✅ User Panel", [
+        ["Send SMS", "Balance"],
+        ["Back"]
+      ]);
+    } else {
+      return send(chatId, "❌ Wrong Password");
+    }
+  }
+
+  // ===== ADMIN PANEL =====
   if (state[chatId].admin) {
 
     if (text === "User Add") {
@@ -102,7 +130,7 @@ app.post("/", (req, res) => {
     }
   }
 
-  // ===== USER ADD FLOW =====
+  // ===== USER ADD =====
   if (state[chatId].step === "add_user") {
     state[chatId].tempUser = text;
     state[chatId].step = "add_pass";
@@ -133,17 +161,15 @@ app.post("/", (req, res) => {
 
   if (state[chatId].step === "coin_add_amount") {
     let u = users[state[chatId].target];
-
     if (!u) return send(chatId, "❌ User not found");
 
     let amount = parseInt(text);
     if (isNaN(amount)) return send(chatId, "❌ Invalid");
 
     u.coin += amount;
-
     state[chatId] = { admin: true };
 
-    return send(chatId, `✅ Added\nBalance: ${u.coin}`, [
+    return send(chatId, `✅ Coin Added (${u.coin})`, [
       ["User Add", "User List"],
       ["Coin Add", "Coin Edit"],
       ["Back"]
@@ -159,48 +185,19 @@ app.post("/", (req, res) => {
 
   if (state[chatId].step === "coin_edit_amount") {
     let u = users[state[chatId].target];
-
     if (!u) return send(chatId, "❌ User not found");
 
     let amount = parseInt(text);
     if (isNaN(amount)) return send(chatId, "❌ Invalid");
 
     u.coin = amount;
-
     state[chatId] = { admin: true };
 
-    return send(chatId, `✅ Updated\nBalance: ${u.coin}`, [
+    return send(chatId, `✅ Coin Updated (${u.coin})`, [
       ["User Add", "User List"],
       ["Coin Add", "Coin Edit"],
       ["Back"]
     ]);
-  }
-
-  // ===== USER LOGIN =====
-  if (text === "User Login") {
-    state[chatId] = { step: "user_id" };
-    return send(chatId, "Enter User ID:");
-  }
-
-  if (state[chatId].step === "user_id") {
-    state[chatId].loginUser = text;
-    state[chatId].step = "user_pass";
-    return send(chatId, "Enter Password:");
-  }
-
-  if (state[chatId].step === "user_pass") {
-    let u = users[state[chatId].loginUser];
-
-    if (u && u.password === text) {
-      state[chatId] = { user: state[chatId].loginUser };
-
-      return send(chatId, "✅ User Panel", [
-        ["Send SMS", "Balance"],
-        ["Back"]
-      ]);
-    } else {
-      return send(chatId, "❌ Login Failed");
-    }
   }
 
   // ===== USER PANEL =====
@@ -228,19 +225,21 @@ app.post("/", (req, res) => {
 
     if (u.coin <= 0) return send(chatId, "❌ No Coin");
 
-    axios.get(`https://mahirvai.com/sms.php?key=AM-MRXRPSh2PU&number=${state[chatId].number}&msg=${encodeURIComponent(text)}`).catch(()=>{});
+    axios.get(`https://mahirvai.com/sms.php?key=AM–MRXRPSh2PU&number=${state[chatId].number}&msg=${encodeURIComponent(text)}`)
+    .then(() => {
+      u.coin--;
+      state[chatId] = { user: state[chatId].user };
 
-    u.coin--;
-
-    state[chatId] = { user: state[chatId].user };
-
-    return send(chatId, "✅ SMS Sent", [
-      ["Send SMS", "Balance"],
-      ["Back"]
-    ]);
+      send(chatId, "✅ SMS Sent", [
+        ["Send SMS", "Balance"],
+        ["Back"]
+      ]);
+    })
+    .catch(() => {
+      send(chatId, "❌ SMS Failed");
+    });
   }
 
 });
 
-// ===== SERVER =====
 app.listen(process.env.PORT || 3000);
