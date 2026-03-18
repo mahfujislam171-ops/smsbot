@@ -32,6 +32,7 @@ app.post("/", (req, res) => {
   res.sendStatus(200);
 
   const update = req.body;
+
   if (update.update_id <= lastUpdateId) return;
   lastUpdateId = update.update_id;
 
