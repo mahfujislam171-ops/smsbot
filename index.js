@@ -10,7 +10,7 @@ const API = `https://api.telegram.org/bot${TOKEN}`;
 let state = {};
 let users = {};
 
-// ===== ROOT CHECK =====
+// ===== ROOT =====
 app.get("/", (req, res) => {
   res.send("Bot Running ✅");
 });
@@ -90,7 +90,7 @@ app.post("/", (req, res) => {
     }
   }
 
-  // ===== USER LOGIN FLOW =====
+  // ===== USER LOGIN =====
   if (state[chatId].mode === "user" && state[chatId].step === "id") {
     state[chatId].loginUser = text;
     state[chatId].step = "pass";
@@ -227,8 +227,16 @@ app.post("/", (req, res) => {
 
     if (u.coin <= 0) return send(chatId, "❌ No Coin");
 
-    axios.get(`https://mahirvai.com/sms.php?key=AM-MRXRPSh2PU&number=${state[chatId].number}&msg=${encodeURIComponent(text)}`)
-    .then(() => {
+    axios.get("https://mahirvai.com/sms.php", {
+      params: {
+        key: "AM–MRXRPSh2PU", // তোমার original API 그대로
+        number: state[chatId].number,
+        msg: text
+      }
+    })
+    .then((res) => {
+      console.log(res.data);
+
       u.coin--;
       state[chatId] = { user: state[chatId].user };
 
@@ -238,8 +246,9 @@ app.post("/", (req, res) => {
         ["Back"]
       ]);
     })
-    .catch(() => {
-      send(chatId, "❌ Failed");
+    .catch((err) => {
+      console.log(err.message);
+      send(chatId, "❌ SMS Failed");
     });
   }
 
