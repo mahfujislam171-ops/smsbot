@@ -9,9 +9,8 @@ const API = `https://api.telegram.org/bot${TOKEN}`;
 
 let state = {};
 let users = {};
-let lastUpdateId = 0;
 
-// ===== ROOT FIX (IMPORTANT) =====
+// ===== ROOT CHECK =====
 app.get("/", (req, res) => {
   res.send("Bot Running ✅");
 });
@@ -37,19 +36,27 @@ app.post("/", (req, res) => {
   res.sendStatus(200);
 
   const update = req.body;
-  if (update.update_id <= lastUpdateId) return;
-  lastUpdateId = update.update_id;
+  if (!update.message) return;
 
   const msg = update.message;
-  if (!msg) return;
-
   const chatId = msg.chat.id;
   const text = msg.text;
 
+  if (!text) return;
+
   if (!state[chatId]) state[chatId] = {};
 
-  // ===== GLOBAL RESET =====
-  if (text === "/start" || text === "Back") {
+  // ===== START =====
+  if (text === "/start") {
+    reset(chatId);
+    return send(chatId, "মাহফুজের কাস্টম এসএমএস এ আপনাকে স্বাগতম 👇", [
+      ["Admin Login"],
+      ["User Login"]
+    ]);
+  }
+
+  // ===== BACK =====
+  if (text === "Back") {
     reset(chatId);
     return send(chatId, "মাহফুজের কাস্টম এসএমএস এ আপনাকে স্বাগতম 👇", [
       ["Admin Login"],
@@ -59,14 +66,12 @@ app.post("/", (req, res) => {
 
   // ===== ADMIN LOGIN =====
   if (text === "Admin Login") {
-    reset(chatId);
     state[chatId] = { mode: "admin", step: "pass" };
     return send(chatId, "🔑 Enter Admin Password:");
   }
 
   // ===== USER LOGIN =====
   if (text === "User Login") {
-    reset(chatId);
     state[chatId] = { mode: "user", step: "id" };
     return send(chatId, "Enter User ID:");
   }
@@ -111,7 +116,7 @@ app.post("/", (req, res) => {
   if (state[chatId].admin) {
 
     if (text === "User Add") {
-      state[chatId] = { admin: true, step: "add_user" };
+      state[chatId].step = "add_user";
       return send(chatId, "Enter username:");
     }
 
@@ -124,29 +129,13 @@ app.post("/", (req, res) => {
     }
 
     if (text === "User Delete") {
-      state[chatId] = { admin: true, step: "delete_user" };
-      return send(chatId, "Enter username to delete:");
+      state[chatId].step = "delete_user";
+      return send(chatId, "Enter username:");
     }
 
     if (text === "Coin Edit") {
-      state[chatId] = { admin: true, step: "coin_edit_user" };
+      state[chatId].step = "coin_user";
       return send(chatId, "Enter username:");
-    }
-  }
-
-  // ===== USER DELETE =====
-  if (state[chatId].step === "delete_user") {
-    if (users[text]) {
-      delete users[text];
-      state[chatId] = { admin: true };
-
-      return send(chatId, "✅ User Deleted", [
-        ["User Add", "User List"],
-        ["User Delete", "Coin Edit"],
-        ["Back"]
-      ]);
-    } else {
-      return send(chatId, "❌ User not found");
     }
   }
 
@@ -172,24 +161,37 @@ app.post("/", (req, res) => {
     ]);
   }
 
-  // ===== COIN EDIT =====
-  if (state[chatId].step === "coin_edit_user") {
-    state[chatId].target = text;
-    state[chatId].step = "coin_edit_amount";
-    return send(chatId, "Enter new coin:");
+  // ===== DELETE =====
+  if (state[chatId].step === "delete_user") {
+    if (users[text]) {
+      delete users[text];
+      state[chatId] = { admin: true };
+
+      return send(chatId, "✅ Deleted", [
+        ["User Add", "User List"],
+        ["User Delete", "Coin Edit"],
+        ["Back"]
+      ]);
+    } else {
+      return send(chatId, "❌ Not found");
+    }
   }
 
-  if (state[chatId].step === "coin_edit_amount") {
+  // ===== COIN EDIT =====
+  if (state[chatId].step === "coin_user") {
+    state[chatId].target = text;
+    state[chatId].step = "coin_amount";
+    return send(chatId, "Enter coin:");
+  }
+
+  if (state[chatId].step === "coin_amount") {
     let u = users[state[chatId].target];
     if (!u) return send(chatId, "❌ User not found");
 
-    let amount = parseInt(text);
-    if (isNaN(amount)) return send(chatId, "❌ Invalid");
-
-    u.coin = amount;
+    u.coin = parseInt(text);
     state[chatId] = { admin: true };
 
-    return send(chatId, `✅ Coin Updated (${u.coin})`, [
+    return send(chatId, "✅ Updated", [
       ["User Add", "User List"],
       ["User Delete", "Coin Edit"],
       ["Back"]
@@ -204,7 +206,7 @@ app.post("/", (req, res) => {
     }
 
     if (text === "Coin Buy") {
-      return send(chatId, "📩 Buy Coin: https://t.me/MRX404BYTOWHID");
+      return send(chatId, "📩 Buy: https://t.me/MRX404BYTOWHID");
     }
 
     if (text === "Send SMS") {
@@ -223,7 +225,6 @@ app.post("/", (req, res) => {
   if (state[chatId].step === "sms_msg") {
     let u = users[state[chatId].user];
 
-    if (!u) return send(chatId, "❌ User error");
     if (u.coin <= 0) return send(chatId, "❌ No Coin");
 
     axios.get(`https://mahirvai.com/sms.php?key=AM-MRXRPSh2PU&number=${state[chatId].number}&msg=${encodeURIComponent(text)}`)
@@ -238,7 +239,7 @@ app.post("/", (req, res) => {
       ]);
     })
     .catch(() => {
-      send(chatId, "❌ SMS Failed");
+      send(chatId, "❌ Failed");
     });
   }
 
