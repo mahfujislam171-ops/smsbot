@@ -7,24 +7,23 @@ app.use(express.json());
 const TOKEN = "8651056162:AAFoTNM6DHlUJv4CLhR8GKF_62FWLASFImk";
 const API = `https://api.telegram.org/bot${TOKEN}`;
 
-// ====== DATA ======
 let state = {};
-let users = {}; // username -> {password, coin}
+let users = {};
 
-// ====== SEND MSG ======
-function send(chatId, text, keyboard = null) {
-  return axios.post(`${API}/sendMessage`, {
+// ===== SEND =====
+function send(chatId, text, keyboard) {
+  axios.post(`${API}/sendMessage`, {
     chat_id: chatId,
     text,
     reply_markup: keyboard
       ? { keyboard, resize_keyboard: true }
       : undefined,
-  });
+  }).catch(() => {});
 }
 
-// ====== WEBHOOK ======
+// ===== WEBHOOK =====
 app.post("/", (req, res) => {
-  res.sendStatus(200); // ⚡ FAST reply
+  res.sendStatus(200); // ⚡ FAST
 
   const update = req.body;
   if (!update.message) return;
@@ -39,7 +38,7 @@ app.post("/", (req, res) => {
     state[chatId] = {};
     return send(chatId, "Welcome 👇", [
       ["Admin Login"],
-      ["User Login"],
+      ["User Login"]
     ]);
   }
 
@@ -51,12 +50,12 @@ app.post("/", (req, res) => {
 
   if (state[chatId].step === "admin_pass") {
     if (text === "794082") {
-      state[chatId].admin = true;
-      state[chatId].step = null;
+      state[chatId] = { admin: true };
 
       return send(chatId, "✅ Admin Panel", [
         ["User Add", "User List"],
-        ["Back"],
+        ["Coin Add", "Coin Edit"],
+        ["Back"]
       ]);
     } else {
       return send(chatId, "❌ Wrong Password");
@@ -78,23 +77,91 @@ app.post("/", (req, res) => {
   if (state[chatId].step === "add_pass") {
     users[state[chatId].newUser] = {
       password: text,
-      coin: 5,
+      coin: 5
     };
-    state[chatId].step = null;
 
-    return send(chatId, "✅ User created", [
+    state[chatId] = { admin: true };
+
+    return send(chatId, "✅ User Created", [
       ["User Add", "User List"],
-      ["Back"],
+      ["Coin Add", "Coin Edit"],
+      ["Back"]
     ]);
   }
 
   // ===== USER LIST =====
   if (text === "User List" && state[chatId].admin) {
     let list = Object.keys(users)
-      .map((u) => `${u} (coin: ${users[u].coin})`)
+      .map(u => `${u} (coin: ${users[u].coin})`)
       .join("\n");
 
     return send(chatId, list || "No users");
+  }
+
+  // ===== COIN ADD =====
+  if (text === "Coin Add" && state[chatId].admin) {
+    state[chatId].step = "coin_add_user";
+    return send(chatId, "Enter username:");
+  }
+
+  if (state[chatId].step === "coin_add_user") {
+    state[chatId].targetUser = text;
+    state[chatId].step = "coin_add_amount";
+    return send(chatId, "Enter coin amount:");
+  }
+
+  if (state[chatId].step === "coin_add_amount") {
+    let u = users[state[chatId].targetUser];
+
+    if (!u) {
+      state[chatId].step = null;
+      return send(chatId, "❌ User not found");
+    }
+
+    let amount = parseInt(text);
+    if (isNaN(amount)) return send(chatId, "❌ Invalid number");
+
+    u.coin += amount;
+    state[chatId] = { admin: true };
+
+    return send(chatId, `✅ Coin Added\nNew Balance: ${u.coin}`, [
+      ["User Add", "User List"],
+      ["Coin Add", "Coin Edit"],
+      ["Back"]
+    ]);
+  }
+
+  // ===== COIN EDIT =====
+  if (text === "Coin Edit" && state[chatId].admin) {
+    state[chatId].step = "coin_edit_user";
+    return send(chatId, "Enter username:");
+  }
+
+  if (state[chatId].step === "coin_edit_user") {
+    state[chatId].targetUser = text;
+    state[chatId].step = "coin_edit_amount";
+    return send(chatId, "Enter new coin:");
+  }
+
+  if (state[chatId].step === "coin_edit_amount") {
+    let u = users[state[chatId].targetUser];
+
+    if (!u) {
+      state[chatId].step = null;
+      return send(chatId, "❌ User not found");
+    }
+
+    let amount = parseInt(text);
+    if (isNaN(amount)) return send(chatId, "❌ Invalid number");
+
+    u.coin = amount;
+    state[chatId] = { admin: true };
+
+    return send(chatId, `✅ Coin Updated\nNew Balance: ${u.coin}`, [
+      ["User Add", "User List"],
+      ["Coin Add", "Coin Edit"],
+      ["Back"]
+    ]);
   }
 
   // ===== USER LOGIN =====
@@ -113,12 +180,11 @@ app.post("/", (req, res) => {
     let u = users[state[chatId].loginUser];
 
     if (u && u.password === text) {
-      state[chatId].user = state[chatId].loginUser;
-      state[chatId].step = null;
+      state[chatId] = { user: state[chatId].loginUser };
 
       return send(chatId, "✅ User Panel", [
         ["Send SMS", "Balance"],
-        ["Back"],
+        ["Back"]
       ]);
     } else {
       return send(chatId, "❌ Login Failed");
@@ -134,36 +200,30 @@ app.post("/", (req, res) => {
   // ===== SMS =====
   if (text === "Send SMS" && state[chatId].user) {
     state[chatId].step = "sms_number";
-    return send(chatId, "Enter number:");
+    return send(chatId, "Enter Number:");
   }
 
   if (state[chatId].step === "sms_number") {
     state[chatId].number = text;
     state[chatId].step = "sms_msg";
-    return send(chatId, "Enter message:");
+    return send(chatId, "Enter Message:");
   }
 
   if (state[chatId].step === "sms_msg") {
     let u = users[state[chatId].user];
 
     if (u.coin <= 0) {
-      return send(chatId, "❌ No coin");
+      return send(chatId, "❌ No Coin");
     }
 
-    let number = state[chatId].number;
-    let msg = text;
-
-    // ===== SMS API =====
-    axios.get(
-      `https://mahirvai.com/sms.php?key=AM–MRXRPSh2PU&number=${number}&msg=${encodeURIComponent(msg)}`
-    );
+    axios.get(`https://mahirvai.com/sms.php?key=AM-MRXRPSh2PU&number=${state[chatId].number}&msg=${encodeURIComponent(text)}`).catch(()=>{});
 
     u.coin -= 1;
-    state[chatId].step = null;
+    state[chatId] = { user: state[chatId].user };
 
     return send(chatId, "✅ SMS Sent", [
       ["Send SMS", "Balance"],
-      ["Back"],
+      ["Back"]
     ]);
   }
 
@@ -172,12 +232,12 @@ app.post("/", (req, res) => {
     state[chatId] = {};
     return send(chatId, "Welcome 👇", [
       ["Admin Login"],
-      ["User Login"],
+      ["User Login"]
     ]);
   }
 });
 
 // ===== SERVER =====
-app.listen(process.env.PORT || 3000, () =>
-  console.log("Server running")
-);
+app.listen(process.env.PORT || 3000, () => {
+  console.log("Running...");
+});
