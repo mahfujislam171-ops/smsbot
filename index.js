@@ -5,29 +5,59 @@ const app = express();
 app.use(express.json());
 
 // ===== CONFIG =====
-const TOKEN = "8651056162:AAGfdgiwy44bL7jc2hkzKNCGWqijoGY-Jfc";
+const TOKEN = "8651056162:AAFkb1lRavN9v66ix3_I8gWQqUCvKG5322I";
 const URL = `https://api.telegram.org/bot${TOKEN}`;
-
-const ADMIN_PASSWORD = "794082";
+const ADMIN_PASS = "794082";
 
 // ===== DATA =====
-let users = {};      // username: {password, coin}
+let users = {};
 let banned = {};
 let logs = [];
-
-// ===== USER STATE =====
 let step = {};
 let session = {};
 
-// ===== SEND MESSAGE =====
-async function sendMessage(chatId, text) {
+// ===== SEND MSG =====
+async function send(chatId, text, keyboard = []) {
   await axios.post(`${URL}/sendMessage`, {
     chat_id: chatId,
-    text: text
+    text: text,
+    reply_markup: {
+      keyboard: keyboard,
+      resize_keyboard: true
+    }
   });
 }
 
-// ===== MAIN WEBHOOK =====
+// ===== START =====
+async function startMenu(chatId) {
+  step[chatId] = "start";
+  return send(chatId, "Choose option:", [
+    ["👑 Admin Login"],
+    ["👤 User Login"]
+  ]);
+}
+
+// ===== ADMIN PANEL =====
+async function adminPanel(chatId) {
+  step[chatId] = "admin";
+  return send(chatId, "Admin Panel:", [
+    ["➕ Add User", "📋 User List"],
+    ["🔙 Back"]
+  ]);
+}
+
+// ===== USER PANEL =====
+async function userPanel(chatId) {
+  let u = session[chatId].username;
+  step[chatId] = "user";
+  return send(chatId, `User Panel\nBalance: ${users[u].coin}`, [
+    ["📩 Send SMS"],
+    ["👤 Account", "💰 Balance"],
+    ["🔙 Back"]
+  ]);
+}
+
+// ===== WEBHOOK =====
 app.post("/", async (req, res) => {
   const msg = req.body.message;
   if (!msg) return res.send();
@@ -37,62 +67,44 @@ app.post("/", async (req, res) => {
 
   // ===== START =====
   if (text === "/start") {
-    step[chatId] = "choose";
-
-    return sendMessage(chatId,
-`1. Admin
-2. User`);
+    return startMenu(chatId);
   }
 
-  // ===== CHOOSE =====
-  if (step[chatId] === "choose") {
-    if (text == "1") {
-      step[chatId] = "admin_pass";
-      return sendMessage(chatId, "Enter Admin Password:");
-    }
-    if (text == "2") {
-      step[chatId] = "user_login";
-      return sendMessage(chatId, "Enter username:");
-    }
+  // ===== MAIN =====
+  if (text === "👑 Admin Login") {
+    step[chatId] = "admin_pass";
+    return send(chatId, "Enter Admin Password:", [["🔙 Back"]]);
+  }
+
+  if (text === "👤 User Login") {
+    step[chatId] = "user_name";
+    return send(chatId, "Enter Username:", [["🔙 Back"]]);
+  }
+
+  // ===== BACK =====
+  if (text === "🔙 Back") {
+    return startMenu(chatId);
   }
 
   // ===== ADMIN LOGIN =====
   if (step[chatId] === "admin_pass") {
-    if (text === ADMIN_PASSWORD) {
-      step[chatId] = "admin_panel";
-      return sendMessage(chatId,
-`Admin Panel:
-1. Add User
-2. Delete User
-3. Ban User
-4. Set Coin
-5. View Logs`);
+    if (text === ADMIN_PASS) {
+      return adminPanel(chatId);
     } else {
-      return sendMessage(chatId, "Wrong Password ❌");
+      return send(chatId, "Wrong Password ❌");
     }
   }
 
   // ===== ADMIN PANEL =====
-  if (step[chatId] === "admin_panel") {
-    if (text == "1") {
+  if (step[chatId] === "admin") {
+    if (text === "➕ Add User") {
       step[chatId] = "add_user";
-      return sendMessage(chatId, "Send: username password");
+      return send(chatId, "Send: username password", [["🔙 Back"]]);
     }
-    if (text == "2") {
-      step[chatId] = "delete_user";
-      return sendMessage(chatId, "Enter username:");
-    }
-    if (text == "3") {
-      step[chatId] = "ban_user";
-      return sendMessage(chatId, "Enter username:");
-    }
-    if (text == "4") {
-      step[chatId] = "set_coin";
-      return sendMessage(chatId, "Send: username coin");
-    }
-    if (text == "5") {
-      let all = logs.join("\n") || "No logs";
-      return sendMessage(chatId, all);
+
+    if (text === "📋 User List") {
+      let list = Object.keys(users).join("\n") || "No users";
+      return send(chatId, list, [["🔙 Back"]]);
     }
   }
 
@@ -100,94 +112,70 @@ app.post("/", async (req, res) => {
   if (step[chatId] === "add_user") {
     let [u, p] = text.split(" ");
     users[u] = { password: p, coin: 10 };
-    step[chatId] = "admin_panel";
-    return sendMessage(chatId, "User Added ✅");
-  }
-
-  // ===== DELETE USER =====
-  if (step[chatId] === "delete_user") {
-    delete users[text];
-    step[chatId] = "admin_panel";
-    return sendMessage(chatId, "User Deleted ❌");
-  }
-
-  // ===== BAN USER =====
-  if (step[chatId] === "ban_user") {
-    banned[text] = true;
-    step[chatId] = "admin_panel";
-    return sendMessage(chatId, "User Banned 🚫");
-  }
-
-  // ===== SET COIN =====
-  if (step[chatId] === "set_coin") {
-    let [u, c] = text.split(" ");
-    if (users[u]) users[u].coin = parseInt(c);
-    step[chatId] = "admin_panel";
-    return sendMessage(chatId, "Coin Updated 💰");
+    return adminPanel(chatId);
   }
 
   // ===== USER LOGIN =====
-  if (step[chatId] === "user_login") {
+  if (step[chatId] === "user_name") {
     session[chatId] = { username: text };
     step[chatId] = "user_pass";
-    return sendMessage(chatId, "Enter password:");
+    return send(chatId, "Enter Password:", [["🔙 Back"]]);
   }
 
   if (step[chatId] === "user_pass") {
     let u = session[chatId].username;
 
     if (!users[u] || users[u].password !== text) {
-      return sendMessage(chatId, "Login Failed ❌");
+      return send(chatId, "Login Failed ❌");
     }
 
     if (banned[u]) {
-      return sendMessage(chatId, "You are banned 🚫");
+      return send(chatId, "Banned 🚫");
     }
 
-    session[chatId].login = true;
-    step[chatId] = "user_menu";
-
-    return sendMessage(chatId,
-`Welcome ${u}
-Coin: ${users[u].coin}
-
-Send Number:`);
+    return userPanel(chatId);
   }
 
-  // ===== USER SEND SMS =====
-  if (step[chatId] === "user_menu") {
+  // ===== USER PANEL =====
+  if (step[chatId] === "user") {
+    if (text === "📩 Send SMS") {
+      step[chatId] = "number";
+      return send(chatId, "Enter Number:", [["🔙 Back"]]);
+    }
+
+    if (text === "💰 Balance") {
+      let u = session[chatId].username;
+      return send(chatId, `Balance: ${users[u].coin}`);
+    }
+
+    if (text === "👤 Account") {
+      let u = session[chatId].username;
+      return send(chatId, `User: ${u}\nCoin: ${users[u].coin}`);
+    }
+  }
+
+  // ===== SMS FLOW =====
+  if (step[chatId] === "number") {
     session[chatId].number = text;
-    step[chatId] = "sms_text";
-    return sendMessage(chatId, "Send SMS text:");
+    step[chatId] = "sms";
+    return send(chatId, "Enter Message:", [["🔙 Back"]]);
   }
 
-  if (step[chatId] === "sms_text") {
+  if (step[chatId] === "sms") {
     let u = session[chatId].username;
 
     if (users[u].coin <= 0) {
-      return sendMessage(chatId, "No coin ❌");
+      return send(chatId, "No Balance ❌");
     }
 
-    // ===== FAKE SMS API (EDIT HERE) =====
-    console.log("SMS Sent:", session[chatId].number, text);
+    // ===== SMS API =====
+    await axios.get(`https://your-sms-api.com/send?number=${session[chatId].number}&msg=${text}`);
 
     users[u].coin--;
 
     logs.push(`${u} → ${session[chatId].number} → ${text}`);
 
-    step[chatId] = "again";
-
-    return sendMessage(chatId, "SMS Sent ✅\nSend again? (yes/no)");
-  }
-
-  if (step[chatId] === "again") {
-    if (text.toLowerCase() === "yes") {
-      step[chatId] = "user_menu";
-      return sendMessage(chatId, "Enter Number:");
-    } else {
-      step[chatId] = "choose";
-      return sendMessage(chatId, "Done ✅\n/start again");
-    }
+    return userPanel(chatId);
   }
 
   res.send();
@@ -195,9 +183,7 @@ Send Number:`);
 
 // ===== SERVER =====
 app.get("/", (req, res) => {
-  res.send("Bot Running...");
+  res.send("Running...");
 });
 
-app.listen(process.env.PORT || 3000, () => {
-  console.log("Server Started");
-});
+app.listen(process.env.PORT || 3000);
