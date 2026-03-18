@@ -2,7 +2,7 @@ const express = require("express");
 const app = express();
 const axios = require("axios");
 
-const TOKEN = "8640081601:AAF3pNFGoIJlozFnVZChBbz250WVdbmcgAA";
+const TOKEN = "8651056162:AAEwp5062i3fpRpvLXuyuhfpn7hjUuhJG4I";
 const URL = `https://api.telegram.org/bot${TOKEN}`;
 
 app.use(express.json());
