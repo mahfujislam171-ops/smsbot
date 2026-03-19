@@ -23,16 +23,12 @@ function send(id, text, keyboard) {
   }).catch(() => {});
 }
 
-// ===== HOME =====
+// ===== PANELS =====
 function home(id) {
   state[id] = {};
-  return send(id, "Welcome 👇", [
-    ["Admin Login"],
-    ["User Login"]
-  ]);
+  return send(id, "Welcome 👇", [["Admin Login"], ["User Login"]]);
 }
 
-// ===== ADMIN PANEL =====
 function adminPanel(id) {
   state[id] = { admin: true };
   return send(id, "Admin Panel", [
@@ -43,7 +39,6 @@ function adminPanel(id) {
   ]);
 }
 
-// ===== USER PANEL =====
 function userPanel(id, user) {
   state[id] = { user };
   return send(id, "User Panel", [
@@ -70,7 +65,7 @@ app.post("/", async (req, res) => {
 
   if (!state[id]) state[id] = {};
 
-  // ===== BACK (FIXED) =====
+  // ===== BACK =====
   if (text === "Back") {
     if (state[id].admin) return adminPanel(id);
     if (state[id].user) return userPanel(id, state[id].user);
@@ -93,11 +88,11 @@ app.post("/", async (req, res) => {
 
   // ===== PASSWORD CHANGE =====
   if (text === "PASSWORD CHANGE") {
-    state[id] = { admin: true, step: "old_pass" };
+    state[id] = { admin: true, step: "old" };
     return send(id, "Current Password:");
   }
 
-  if (state[id].step === "old_pass") {
+  if (state[id].step === "old") {
     if (text !== adminPass) return send(id, "Wrong");
     state[id].step = "new1";
     return send(id, "New Password:");
@@ -112,6 +107,7 @@ app.post("/", async (req, res) => {
   if (state[id].step === "new2") {
     if (text !== state[id].temp) return send(id, "Not match");
     adminPass = text;
+    await send(id, "✅ Password Updated");
     return adminPanel(id);
   }
 
@@ -138,6 +134,7 @@ app.post("/", async (req, res) => {
       password: state[id].p,
       coin: parseInt(text)
     };
+    await send(id, "✅ User Created");
     return adminPanel(id);
   }
 
@@ -152,7 +149,7 @@ app.post("/", async (req, res) => {
   // ===== USER MANAGE =====
   if (text === "User Manage") {
     let keys = Object.keys(users);
-    state[id] = { admin: true, step: "select_user" };
+    state[id] = { admin: true, step: "select" };
 
     return send(id, "Select User:", [
       ...keys.map(u => [u]),
@@ -160,7 +157,7 @@ app.post("/", async (req, res) => {
     ]);
   }
 
-  if (state[id].step === "select_user" && users[text]) {
+  if (state[id].step === "select" && users[text]) {
     state[id] = { admin: true, selected: text, step: "action" };
 
     return send(id, `User: ${text}`, [
@@ -172,10 +169,11 @@ app.post("/", async (req, res) => {
   // ===== DELETE =====
   if (state[id].step === "action" && text === "Delete") {
     delete users[state[id].selected];
+    await send(id, "✅ Deleted");
     return adminPanel(id);
   }
 
-  // ===== COIN EDIT =====
+  // ===== EDIT COIN =====
   if (state[id].step === "action" && text === "Edit Coin") {
     state[id].step = "coin";
     return send(id, "New coin:");
@@ -183,6 +181,7 @@ app.post("/", async (req, res) => {
 
   if (state[id].step === "coin") {
     users[state[id].selected].coin = parseInt(text);
+    await send(id, "✅ Updated");
     return adminPanel(id);
   }
 
@@ -196,11 +195,15 @@ app.post("/", async (req, res) => {
 
   if (text === "API CHANGE") {
     state[id] = { admin: true, step: "api" };
-    return send(id, `Current API:\nhttps://mahirvai.com/sms.php?key=${apiKey}&number=01XXXXXXXX&msg=XXXX\n\nSend new API key:`);
+    return send(
+      id,
+      `Current API:\nhttps://mahirvai.com/sms.php?key=${apiKey}&number=01XXXXXXXX&msg=XXXX\n\nSend new key:`
+    );
   }
 
   if (state[id].step === "api") {
     apiKey = text;
+    await send(id, "✅ API Updated");
     return adminPanel(id);
   }
 
@@ -210,27 +213,24 @@ app.post("/", async (req, res) => {
 
   // ===== USER LOGIN =====
   if (text === "User Login") {
-    state[id] = { step: "login_u" };
+    state[id] = { step: "lu" };
     return send(id, "Username:");
   }
 
-  if (state[id].step === "login_u") {
+  if (state[id].step === "lu") {
     state[id].lu = text;
-    state[id].step = "login_p";
+    state[id].step = "lp";
     return send(id, "Password:");
   }
 
-  if (state[id].step === "login_p") {
+  if (state[id].step === "lp") {
     let u = users[state[id].lu];
-    if (u && u.password === text) {
-      return userPanel(id, state[id].lu);
-    }
+    if (u && u.password === text) return userPanel(id, state[id].lu);
     return send(id, "Wrong");
   }
 
   // ===== USER =====
   if (state[id].user) {
-
     if (text === "Balance") {
       return send(id, `${users[state[id].user].coin}`);
     }
@@ -259,12 +259,13 @@ app.post("/", async (req, res) => {
     let url = `https://mahirvai.com/sms.php?key=${apiKey}&number=${state[id].num}&msg=${encodeURIComponent(text)}`;
 
     axios.get(url)
-      .then(() => {
+      .then(async () => {
         u.coin--;
+        await send(id, "✅ SMS Sent");
         return userPanel(id, state[id].user);
       })
       .catch(() => {
-        return send(id, "Failed");
+        send(id, "❌ Failed");
       });
   }
 
