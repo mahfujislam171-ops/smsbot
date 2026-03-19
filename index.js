@@ -7,10 +7,13 @@ app.use(express.json());
 const TOKEN = "8651056162:AAGMY4F0HVZzic89t_MEZ2X7a1dOUfhxJ1g";
 const API = `https://api.telegram.org/bot${TOKEN}`;
 
+// ===== DATA =====
 let users = {};
 let state = {};
 let adminPass = "794082";
-let apiKey = "AM-MRXRPSh2PU";
+
+// 👉 FULL API LINK (IMPORTANT)
+let apiLink = "https://mahirvai.com/sms.php?key=AM-MRXRPSh2PU&number=01XXXXXXXX&msg=XXXX";
 
 // ===== SEND =====
 function send(id, text, keyboard) {
@@ -26,7 +29,10 @@ function send(id, text, keyboard) {
 // ===== PANELS =====
 function home(id) {
   state[id] = {};
-  return send(id, "Welcome 👇", [["Admin Login"], ["User Login"]]);
+  return send(id, "স্বাগতম 👇", [
+    ["Admin Login"],
+    ["User Login"]
+  ]);
 }
 
 function adminPanel(id) {
@@ -83,7 +89,7 @@ app.post("/", async (req, res) => {
 
   if (state[id].step === "admin_pass") {
     if (text === adminPass) return adminPanel(id);
-    return send(id, "Wrong Password");
+    return send(id, "❌ Wrong Password");
   }
 
   // ===== PASSWORD CHANGE =====
@@ -93,7 +99,7 @@ app.post("/", async (req, res) => {
   }
 
   if (state[id].step === "old") {
-    if (text !== adminPass) return send(id, "Wrong");
+    if (text !== adminPass) return send(id, "❌ Wrong");
     state[id].step = "new1";
     return send(id, "New Password:");
   }
@@ -105,7 +111,7 @@ app.post("/", async (req, res) => {
   }
 
   if (state[id].step === "new2") {
-    if (text !== state[id].temp) return send(id, "Not match");
+    if (text !== state[id].temp) return send(id, "❌ Not match");
     adminPass = text;
     await send(id, "✅ Password Updated");
     return adminPanel(id);
@@ -173,7 +179,7 @@ app.post("/", async (req, res) => {
     return adminPanel(id);
   }
 
-  // ===== EDIT COIN =====
+  // ===== COIN EDIT =====
   if (state[id].step === "action" && text === "Edit Coin") {
     state[id].step = "coin";
     return send(id, "New coin:");
@@ -185,7 +191,7 @@ app.post("/", async (req, res) => {
     return adminPanel(id);
   }
 
-  // ===== API =====
+  // ===== API EDITOR =====
   if (text === "API EDITOR") {
     return send(id, "API Panel", [
       ["API CHANGE", "API BALANCE"],
@@ -197,12 +203,12 @@ app.post("/", async (req, res) => {
     state[id] = { admin: true, step: "api" };
     return send(
       id,
-      `Current API:\nhttps://mahirvai.com/sms.php?key=${apiKey}&number=01XXXXXXXX&msg=XXXX\n\nSend new key:`
+      `Current API:\n${apiLink}\n\nSend new FULL API link:`
     );
   }
 
   if (state[id].step === "api") {
-    apiKey = text;
+    apiLink = text;
     await send(id, "✅ API Updated");
     return adminPanel(id);
   }
@@ -226,13 +232,14 @@ app.post("/", async (req, res) => {
   if (state[id].step === "lp") {
     let u = users[state[id].lu];
     if (u && u.password === text) return userPanel(id, state[id].lu);
-    return send(id, "Wrong");
+    return send(id, "❌ Wrong");
   }
 
   // ===== USER =====
   if (state[id].user) {
+
     if (text === "Balance") {
-      return send(id, `${users[state[id].user].coin}`);
+      return send(id, `💰 ${users[state[id].user].coin}`);
     }
 
     if (text === "Coin Buy") {
@@ -241,7 +248,7 @@ app.post("/", async (req, res) => {
 
     if (text === "Send SMS") {
       state[id].step = "num";
-      return send(id, "Number:");
+      return send(id, "Enter Number:");
     }
   }
 
@@ -249,14 +256,16 @@ app.post("/", async (req, res) => {
   if (state[id].step === "num") {
     state[id].num = text;
     state[id].step = "msg";
-    return send(id, "Message:");
+    return send(id, "Enter Message:");
   }
 
   if (state[id].step === "msg") {
     let u = users[state[id].user];
-    if (!u || u.coin <= 0) return send(id, "No coin");
+    if (!u || u.coin <= 0) return send(id, "❌ No Coin");
 
-    let url = `https://mahirvai.com/sms.php?key=${apiKey}&number=${state[id].num}&msg=${encodeURIComponent(text)}`;
+    let url = apiLink
+      .replace("01XXXXXXXX", state[id].num)
+      .replace("XXXX", encodeURIComponent(text));
 
     axios.get(url)
       .then(async () => {
