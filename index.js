@@ -7,8 +7,9 @@ app.use(express.json());
 const TOKEN = "8651056162:AAFTBhrkoNg5Mpg-cIYj-zSmf6S5LBISgZM";
 const API = `https://api.telegram.org/bot${TOKEN}`;
 
-// ===== API KEY (DYNAMIC) =====
+// ===== VARIABLES =====
 let SMS_API_KEY = "AM–MRXRPSh2PU";
+let ADMIN_PASSWORD = "794082";
 
 let state = {};
 let users = {};
@@ -81,12 +82,12 @@ app.post("/", (req, res) => {
 
   // ===== ADMIN PASSWORD =====
   if (state[chatId].mode === "admin" && state[chatId].step === "pass") {
-    if (text === "794082") {
+    if (text === ADMIN_PASSWORD) {
       state[chatId] = { admin: true };
       return send(chatId, "✅ Admin Panel", [
         ["User Add", "User List"],
         ["User Delete", "Coin Edit"],
-        ["API EDITOR"],
+        ["API EDITOR", "PASSWORD CHANGE"],
         ["Back"]
       ]);
     } else {
@@ -119,6 +120,40 @@ app.post("/", (req, res) => {
   // ===== ADMIN PANEL =====
   if (state[chatId].admin) {
 
+    // ===== PASSWORD CHANGE =====
+    if (text === "PASSWORD CHANGE") {
+      state[chatId] = { admin: true, step: "old_pass" };
+      return send(chatId, "🔑 Enter Current Password:");
+    }
+
+    if (state[chatId].step === "old_pass") {
+      if (text !== ADMIN_PASSWORD) return send(chatId, "❌ Wrong Password");
+      state[chatId].step = "new_pass";
+      return send(chatId, "Enter New Password:");
+    }
+
+    if (state[chatId].step === "new_pass") {
+      state[chatId].tempPass = text;
+      state[chatId].step = "confirm_pass";
+      return send(chatId, "Confirm New Password:");
+    }
+
+    if (state[chatId].step === "confirm_pass") {
+      if (text !== state[chatId].tempPass) {
+        return send(chatId, "❌ Password not match");
+      }
+
+      ADMIN_PASSWORD = text;
+      state[chatId] = { admin: true };
+
+      return send(chatId, "✅ Password Updated", [
+        ["User Add", "User List"],
+        ["User Delete", "Coin Edit"],
+        ["API EDITOR", "PASSWORD CHANGE"],
+        ["Back"]
+      ]);
+    }
+
     // ===== API EDITOR =====
     if (text === "API EDITOR") {
       state[chatId] = { admin: true, step: "api_menu" };
@@ -128,12 +163,10 @@ app.post("/", (req, res) => {
       ]);
     }
 
-    // ===== API BALANCE =====
     if (text === "API BALANCE") {
       return send(chatId, "🔗 Check Balance:\nhttps://mahirvai.com/Balance.html");
     }
 
-    // ===== API CHANGE =====
     if (text === "API CHANGE") {
       state[chatId] = { admin: true, step: "api_change_input" };
 
@@ -148,31 +181,26 @@ https://mahirvai.com/sms.php?key=YOUR_KEY&number=01XXXXXXXX&msg=XXXX`
       );
     }
 
-    // ===== SAVE NEW API =====
     if (state[chatId].step === "api_change_input") {
-
       try {
-        let newLink = text;
-
-        let keyMatch = newLink.match(/key=([^&]+)/);
+        let keyMatch = text.match(/key=([^&]+)/);
         if (!keyMatch) throw "Invalid";
 
         SMS_API_KEY = keyMatch[1];
-
         state[chatId] = { admin: true };
 
         return send(chatId, "✅ API Updated", [
           ["User Add", "User List"],
           ["User Delete", "Coin Edit"],
-          ["API EDITOR"],
+          ["API EDITOR", "PASSWORD CHANGE"],
           ["Back"]
         ]);
-
       } catch {
-        return send(chatId, "❌ Invalid API Link\nTry again:");
+        return send(chatId, "❌ Invalid API Link");
       }
     }
 
+    // ===== USER MANAGEMENT =====
     if (text === "User Add") {
       state[chatId].step = "add_user";
       return send(chatId, "Enter username:");
@@ -182,7 +210,6 @@ https://mahirvai.com/sms.php?key=YOUR_KEY&number=01XXXXXXXX&msg=XXXX`
       let list = Object.keys(users)
         .map(u => `${u} (coin: ${users[u].coin})`)
         .join("\n");
-
       return send(chatId, list || "No users");
     }
 
@@ -209,13 +236,12 @@ https://mahirvai.com/sms.php?key=YOUR_KEY&number=01XXXXXXXX&msg=XXXX`
       password: text,
       coin: 5
     };
-
     state[chatId] = { admin: true };
 
     return send(chatId, "✅ User Created", [
       ["User Add", "User List"],
       ["User Delete", "Coin Edit"],
-      ["API EDITOR"],
+      ["API EDITOR", "PASSWORD CHANGE"],
       ["Back"]
     ]);
   }
@@ -229,7 +255,7 @@ https://mahirvai.com/sms.php?key=YOUR_KEY&number=01XXXXXXXX&msg=XXXX`
       return send(chatId, "✅ Deleted", [
         ["User Add", "User List"],
         ["User Delete", "Coin Edit"],
-        ["API EDITOR"],
+        ["API EDITOR", "PASSWORD CHANGE"],
         ["Back"]
       ]);
     } else {
@@ -254,7 +280,7 @@ https://mahirvai.com/sms.php?key=YOUR_KEY&number=01XXXXXXXX&msg=XXXX`
     return send(chatId, "✅ Updated", [
       ["User Add", "User List"],
       ["User Delete", "Coin Edit"],
-      ["API EDITOR"],
+      ["API EDITOR", "PASSWORD CHANGE"],
       ["Back"]
     ]);
   }
