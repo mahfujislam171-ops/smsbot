@@ -12,7 +12,7 @@ let users = {};
 let state = {};
 let adminPass = "794082";
 
-// 👉 FULL API LINK (IMPORTANT)
+// FULL API LINK
 let apiLink = "https://mahirvai.com/sms.php?key=AM-MRXRPSh2PU&number=01XXXXXXXX&msg=XXXX";
 
 // ===== SEND =====
@@ -26,7 +26,7 @@ function send(id, text, keyboard) {
   }).catch(() => {});
 }
 
-// ===== PANELS =====
+// ===== HOME =====
 function home(id) {
   state[id] = {};
   return send(id, "স্বাগতম 👇", [
@@ -35,6 +35,7 @@ function home(id) {
   ]);
 }
 
+// ===== ADMIN PANEL =====
 function adminPanel(id) {
   state[id] = { admin: true };
   return send(id, "Admin Panel", [
@@ -45,6 +46,7 @@ function adminPanel(id) {
   ]);
 }
 
+// ===== USER PANEL =====
 function userPanel(id, user) {
   state[id] = { user };
   return send(id, "User Panel", [
@@ -71,10 +73,8 @@ app.post("/", async (req, res) => {
 
   if (!state[id]) state[id] = {};
 
-  // ===== BACK =====
+  // ===== BACK (FIXED → ALWAYS HOME) =====
   if (text === "Back") {
-    if (state[id].admin) return adminPanel(id);
-    if (state[id].user) return userPanel(id, state[id].user);
     return home(id);
   }
 
@@ -235,7 +235,7 @@ app.post("/", async (req, res) => {
     return send(id, "❌ Wrong");
   }
 
-  // ===== USER =====
+  // ===== USER PANEL =====
   if (state[id].user) {
 
     if (text === "Balance") {
@@ -273,8 +273,8 @@ app.post("/", async (req, res) => {
         await send(id, "✅ SMS Sent");
         return userPanel(id, state[id].user);
       })
-      .catch(() => {
-        send(id, "❌ Failed");
+      .catch(async () => {
+        await send(id, "❌ API Call Problem\nContact: @MRX404BYTOWHID 👀");
       });
   }
 
