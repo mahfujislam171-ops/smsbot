@@ -7,12 +7,10 @@ app.use(express.json());
 const TOKEN = "8651056162:AAGMY4F0HVZzic89t_MEZ2X7a1dOUfhxJ1g";
 const API = `https://api.telegram.org/bot${TOKEN}`;
 
-// ===== DATA =====
 let users = {};
 let state = {};
 let adminPass = "794082";
 
-// FULL API LINK
 let apiLink = "https://mahirvai.com/sms.php?key=AM-MRXRPSh2PU&number=01XXXXXXXX&msg=XXXX";
 
 // ===== SEND =====
@@ -26,7 +24,7 @@ function send(id, text, keyboard) {
   }).catch(() => {});
 }
 
-// ===== HOME =====
+// ===== PANELS =====
 function home(id) {
   state[id] = {};
   return send(id, "স্বাগতম 👇", [
@@ -35,7 +33,6 @@ function home(id) {
   ]);
 }
 
-// ===== ADMIN PANEL =====
 function adminPanel(id) {
   state[id] = { admin: true };
   return send(id, "Admin Panel", [
@@ -46,7 +43,6 @@ function adminPanel(id) {
   ]);
 }
 
-// ===== USER PANEL =====
 function userPanel(id, user) {
   state[id] = { user };
   return send(id, "User Panel", [
@@ -73,8 +69,10 @@ app.post("/", async (req, res) => {
 
   if (!state[id]) state[id] = {};
 
-  // ===== BACK (FIXED → ALWAYS HOME) =====
+  // ===== BACK (FINAL FIX) =====
   if (text === "Back") {
+    if (state[id].admin) return adminPanel(id);
+    if (state[id].user) return userPanel(id, state[id].user);
     return home(id);
   }
 
@@ -172,14 +170,12 @@ app.post("/", async (req, res) => {
     ]);
   }
 
-  // ===== DELETE =====
   if (state[id].step === "action" && text === "Delete") {
     delete users[state[id].selected];
     await send(id, "✅ Deleted");
     return adminPanel(id);
   }
 
-  // ===== COIN EDIT =====
   if (state[id].step === "action" && text === "Edit Coin") {
     state[id].step = "coin";
     return send(id, "New coin:");
@@ -191,7 +187,7 @@ app.post("/", async (req, res) => {
     return adminPanel(id);
   }
 
-  // ===== API EDITOR =====
+  // ===== API =====
   if (text === "API EDITOR") {
     return send(id, "API Panel", [
       ["API CHANGE", "API BALANCE"],
@@ -201,10 +197,7 @@ app.post("/", async (req, res) => {
 
   if (text === "API CHANGE") {
     state[id] = { admin: true, step: "api" };
-    return send(
-      id,
-      `Current API:\n${apiLink}\n\nSend new FULL API link:`
-    );
+    return send(id, `Current API:\n${apiLink}\n\nSend new FULL API link:`);
   }
 
   if (state[id].step === "api") {
