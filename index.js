@@ -42,7 +42,7 @@ function home(id) {
 
 // ===== ADMIN PANEL =====
 function adminPanel(id) {
-  state[id] = { admin: true };
+  state[id] = { admin: true, step: null };
   send(id, "✅ Admin Panel", [
     ["User Add", "User List"],
     ["User Manage"],
@@ -53,7 +53,7 @@ function adminPanel(id) {
 
 // ===== USER PANEL =====
 function userPanel(id, user) {
-  state[id] = { user };
+  state[id] = { user: user, step: null };
   send(id, "✅ User Panel", [
     ["Send SMS", "Balance"],
     ["Back"]
@@ -80,15 +80,17 @@ app.post("/", (req, res) => {
   // ===== START =====
   if (text === "/start") return home(id);
 
-  // ===== BACK =====
+  // ===== BACK FIX =====
   if (text === "Back") {
-    state[id].step = null; // 🔥 FIX
-    if (state[id].admin) return adminPanel(id);
-    if (state[id].user) return userPanel(id, state[id].user);
+    if (state[id].step) {
+      state[id].step = null;
+      if (state[id].admin) return adminPanel(id);
+      if (state[id].user) return userPanel(id, state[id].user);
+    }
     return home(id);
   }
 
-  // ===== BAN CHECK =====
+  // ===== BAN =====
   if (ban[id] && id !== OWNER_ID) {
     let left = Math.floor((ban[id] - Date.now()) / 1000);
     if (left > 0) return send(id, `⛔ Ban ${left}s`);
@@ -127,7 +129,7 @@ app.post("/", (req, res) => {
     return send(id, "❌ Wrong Password");
   }
 
-  // ===== ADMIN FEATURES =====
+  // ===== ADMIN =====
   if (state[id].admin) {
 
     if (text === "User Add") {
@@ -209,6 +211,7 @@ app.post("/", (req, res) => {
 
   // ===== API =====
   if (state[id].step === "api") {
+
     if (text === "Change API") {
       state[id].step = "api_set";
       return send(id, "Send full API link:");
@@ -223,7 +226,7 @@ app.post("/", (req, res) => {
     }
   }
 
-  // 🔥 FIXED PART
+  // 🔥 FIXED API INPUT
   if (state[id].step === "api_set") {
 
     if (text === "Back") return adminPanel(id);
