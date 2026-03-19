@@ -13,6 +13,7 @@ let ADMIN_PASSWORD = "794082";
 
 let state = {};
 let users = {};
+let banList = {}; // ===== BAN SYSTEM =====
 
 // ===== ROOT =====
 app.get("/", (req, res) => {
@@ -35,6 +36,13 @@ function reset(chatId) {
   state[chatId] = {};
 }
 
+// ===== TIME FORMAT =====
+function getRemaining(ms) {
+  let h = Math.floor(ms / (1000 * 60 * 60));
+  let m = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+  return `${h}h ${m}m`;
+}
+
 // ===== WEBHOOK =====
 app.post("/", (req, res) => {
   res.sendStatus(200);
@@ -49,6 +57,17 @@ app.post("/", (req, res) => {
   if (!text) return;
 
   if (!state[chatId]) state[chatId] = {};
+
+  // ===== BAN CHECK =====
+  if (banList[chatId]) {
+    let remaining = banList[chatId] - Date.now();
+
+    if (remaining > 0) {
+      return send(chatId, `⛔ Temporary Ban\n⏳ Time Left: ${getRemaining(remaining)}`);
+    } else {
+      delete banList[chatId];
+    }
+  }
 
   // ===== START =====
   if (text === "/start") {
@@ -82,16 +101,22 @@ app.post("/", (req, res) => {
 
   // ===== ADMIN PASSWORD =====
   if (state[chatId].mode === "admin" && state[chatId].step === "pass") {
+
     if (text === ADMIN_PASSWORD) {
       state[chatId] = { admin: true };
+
       return send(chatId, "✅ Admin Panel", [
         ["User Add", "User List"],
         ["User Delete", "Coin Edit"],
         ["API EDITOR", "PASSWORD CHANGE"],
         ["Back"]
       ]);
+
     } else {
-      return send(chatId, "❌ Wrong Password");
+      // ===== BAN 24 HOURS =====
+      banList[chatId] = Date.now() + (24 * 60 * 60 * 1000);
+
+      return send(chatId, "❌ Wrong Password\n⛔ You are banned for 24 hours");
     }
   }
 
@@ -107,6 +132,7 @@ app.post("/", (req, res) => {
 
     if (u && u.password === text) {
       state[chatId] = { user: state[chatId].loginUser };
+
       return send(chatId, "✅ User Panel", [
         ["Send SMS", "Balance"],
         ["Coin Buy"],
@@ -156,7 +182,6 @@ app.post("/", (req, res) => {
 
     // ===== API EDITOR =====
     if (text === "API EDITOR") {
-      state[chatId] = { admin: true, step: "api_menu" };
       return send(chatId, "🔧 API Editor", [
         ["API CHANGE", "API BALANCE"],
         ["Back"]
@@ -164,43 +189,34 @@ app.post("/", (req, res) => {
     }
 
     if (text === "API BALANCE") {
-      return send(chatId, "🔗 Check Balance:\nhttps://mahirvai.com/Balance.html");
+      return send(chatId, "🔗 https://mahirvai.com/Balance.html");
     }
 
     if (text === "API CHANGE") {
-      state[chatId] = { admin: true, step: "api_change_input" };
-
+      state[chatId].step = "api_change";
       return send(chatId,
 `Current API:
 https://mahirvai.com/sms.php?key=${SMS_API_KEY}&number=01XXXXXXXX&msg=XXXX
 
-Send new API link:
-
-Format:
-https://mahirvai.com/sms.php?key=YOUR_KEY&number=01XXXXXXXX&msg=XXXX`
-      );
+Send new API link:`);
     }
 
-    if (state[chatId].step === "api_change_input") {
-      try {
-        let keyMatch = text.match(/key=([^&]+)/);
-        if (!keyMatch) throw "Invalid";
+    if (state[chatId].step === "api_change") {
+      let keyMatch = text.match(/key=([^&]+)/);
+      if (!keyMatch) return send(chatId, "❌ Invalid link");
 
-        SMS_API_KEY = keyMatch[1];
-        state[chatId] = { admin: true };
+      SMS_API_KEY = keyMatch[1];
+      state[chatId] = { admin: true };
 
-        return send(chatId, "✅ API Updated", [
-          ["User Add", "User List"],
-          ["User Delete", "Coin Edit"],
-          ["API EDITOR", "PASSWORD CHANGE"],
-          ["Back"]
-        ]);
-      } catch {
-        return send(chatId, "❌ Invalid API Link");
-      }
+      return send(chatId, "✅ API Updated", [
+        ["User Add", "User List"],
+        ["User Delete", "Coin Edit"],
+        ["API EDITOR", "PASSWORD CHANGE"],
+        ["Back"]
+      ]);
     }
 
-    // ===== USER MANAGEMENT =====
+    // ===== USER SYSTEM =====
     if (text === "User Add") {
       state[chatId].step = "add_user";
       return send(chatId, "Enter username:");
@@ -238,12 +254,7 @@ https://mahirvai.com/sms.php?key=YOUR_KEY&number=01XXXXXXXX&msg=XXXX`
     };
     state[chatId] = { admin: true };
 
-    return send(chatId, "✅ User Created", [
-      ["User Add", "User List"],
-      ["User Delete", "Coin Edit"],
-      ["API EDITOR", "PASSWORD CHANGE"],
-      ["Back"]
-    ]);
+    return send(chatId, "✅ User Created");
   }
 
   // ===== DELETE =====
@@ -251,13 +262,7 @@ https://mahirvai.com/sms.php?key=YOUR_KEY&number=01XXXXXXXX&msg=XXXX`
     if (users[text]) {
       delete users[text];
       state[chatId] = { admin: true };
-
-      return send(chatId, "✅ Deleted", [
-        ["User Add", "User List"],
-        ["User Delete", "Coin Edit"],
-        ["API EDITOR", "PASSWORD CHANGE"],
-        ["Back"]
-      ]);
+      return send(chatId, "✅ Deleted");
     } else {
       return send(chatId, "❌ Not found");
     }
@@ -277,12 +282,7 @@ https://mahirvai.com/sms.php?key=YOUR_KEY&number=01XXXXXXXX&msg=XXXX`
     u.coin = parseInt(text);
     state[chatId] = { admin: true };
 
-    return send(chatId, "✅ Updated", [
-      ["User Add", "User List"],
-      ["User Delete", "Coin Edit"],
-      ["API EDITOR", "PASSWORD CHANGE"],
-      ["Back"]
-    ]);
+    return send(chatId, "✅ Updated");
   }
 
   // ===== USER PANEL =====
@@ -290,10 +290,6 @@ https://mahirvai.com/sms.php?key=YOUR_KEY&number=01XXXXXXXX&msg=XXXX`
 
     if (text === "Balance") {
       return send(chatId, `💰 ${users[state[chatId].user].coin}`);
-    }
-
-    if (text === "Coin Buy") {
-      return send(chatId, "📩 Buy: https://t.me/MRX404BYTOWHID");
     }
 
     if (text === "Send SMS") {
@@ -311,7 +307,6 @@ https://mahirvai.com/sms.php?key=YOUR_KEY&number=01XXXXXXXX&msg=XXXX`
 
   if (state[chatId].step === "sms_msg") {
     let u = users[state[chatId].user];
-
     if (u.coin <= 0) return send(chatId, "❌ No Coin");
 
     axios.get("https://mahirvai.com/sms.php", {
@@ -320,19 +315,12 @@ https://mahirvai.com/sms.php?key=YOUR_KEY&number=01XXXXXXXX&msg=XXXX`
         number: state[chatId].number,
         msg: text
       }
-    })
-    .then(() => {
+    }).then(() => {
       u.coin--;
       state[chatId] = { user: state[chatId].user };
-
-      send(chatId, "✅ SMS Sent", [
-        ["Send SMS", "Balance"],
-        ["Coin Buy"],
-        ["Back"]
-      ]);
-    })
-    .catch(() => {
-      send(chatId, "❌ SMS Failed");
+      send(chatId, "✅ SMS Sent");
+    }).catch(() => {
+      send(chatId, "❌ Failed");
     });
   }
 
