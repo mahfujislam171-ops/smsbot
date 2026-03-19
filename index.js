@@ -7,6 +7,9 @@ app.use(express.json());
 const TOKEN = "8651056162:AAFTBhrkoNg5Mpg-cIYj-zSmf6S5LBISgZM";
 const API = `https://api.telegram.org/bot${TOKEN}`;
 
+// ===== NEW API VARIABLE =====
+let SMS_API_KEY = "AM–MRXRPSh2PU";
+
 let state = {};
 let users = {};
 
@@ -83,6 +86,7 @@ app.post("/", (req, res) => {
       return send(chatId, "✅ Admin Panel", [
         ["User Add", "User List"],
         ["User Delete", "Coin Edit"],
+        ["API EDITOR"],
         ["Back"]
       ]);
     } else {
@@ -114,6 +118,35 @@ app.post("/", (req, res) => {
 
   // ===== ADMIN PANEL =====
   if (state[chatId].admin) {
+
+    if (text === "API EDITOR") {
+      state[chatId].step = "api_menu";
+      return send(chatId, "🔧 API Editor", [
+        ["API CHANGE", "API BALANCE"],
+        ["Back"]
+      ]);
+    }
+
+    if (text === "API CHANGE") {
+      state[chatId].step = "api_change";
+      return send(chatId, `Current API:\n${SMS_API_KEY}\n\nSend new API key:`);
+    }
+
+    if (state[chatId].step === "api_change") {
+      SMS_API_KEY = text;
+      state[chatId] = { admin: true };
+
+      return send(chatId, "✅ API Updated", [
+        ["User Add", "User List"],
+        ["User Delete", "Coin Edit"],
+        ["API EDITOR"],
+        ["Back"]
+      ]);
+    }
+
+    if (text === "API BALANCE") {
+      return send(chatId, "🔗 Check Balance:\nhttps://mahirvai.com/Balance.html");
+    }
 
     if (text === "User Add") {
       state[chatId].step = "add_user";
@@ -157,6 +190,7 @@ app.post("/", (req, res) => {
     return send(chatId, "✅ User Created", [
       ["User Add", "User List"],
       ["User Delete", "Coin Edit"],
+      ["API EDITOR"],
       ["Back"]
     ]);
   }
@@ -170,6 +204,7 @@ app.post("/", (req, res) => {
       return send(chatId, "✅ Deleted", [
         ["User Add", "User List"],
         ["User Delete", "Coin Edit"],
+        ["API EDITOR"],
         ["Back"]
       ]);
     } else {
@@ -194,6 +229,7 @@ app.post("/", (req, res) => {
     return send(chatId, "✅ Updated", [
       ["User Add", "User List"],
       ["User Delete", "Coin Edit"],
+      ["API EDITOR"],
       ["Back"]
     ]);
   }
@@ -229,14 +265,12 @@ app.post("/", (req, res) => {
 
     axios.get("https://mahirvai.com/sms.php", {
       params: {
-        key: "AM–MRXRPSh2PU", // তোমার original API 그대로
+        key: SMS_API_KEY,
         number: state[chatId].number,
         msg: text
       }
     })
-    .then((res) => {
-      console.log(res.data);
-
+    .then(() => {
       u.coin--;
       state[chatId] = { user: state[chatId].user };
 
@@ -246,8 +280,7 @@ app.post("/", (req, res) => {
         ["Back"]
       ]);
     })
-    .catch((err) => {
-      console.log(err.message);
+    .catch(() => {
       send(chatId, "❌ SMS Failed");
     });
   }
