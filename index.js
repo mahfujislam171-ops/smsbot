@@ -82,6 +82,7 @@ app.post("/", (req, res) => {
 
   // ===== BACK =====
   if (text === "Back") {
+    state[id].step = null; // 🔥 FIX
     if (state[id].admin) return adminPanel(id);
     if (state[id].user) return userPanel(id, state[id].user);
     return home(id);
@@ -176,6 +177,7 @@ app.post("/", (req, res) => {
 
   if (state[id].step === "add_coin") {
     users[state[id].u] = { password: state[id].p, coin: parseInt(text) };
+    state[id].step = null;
     return send(id, "✅ User Added");
   }
 
@@ -201,6 +203,7 @@ app.post("/", (req, res) => {
 
   if (state[id].step === "edit") {
     users[state[id].target].coin = parseInt(text);
+    state[id].step = null;
     return send(id, "Updated");
   }
 
@@ -210,14 +213,28 @@ app.post("/", (req, res) => {
       state[id].step = "api_set";
       return send(id, "Send full API link:");
     }
+
     if (text === "Balance Link") {
       return send(id, "https://mahirvai.com/Balance.html");
     }
+
+    if (text === "Back") {
+      return adminPanel(id);
+    }
   }
 
+  // 🔥 FIXED PART
   if (state[id].step === "api_set") {
+
+    if (text === "Back") return adminPanel(id);
+
+    if (!text.includes("http")) {
+      return send(id, "❌ Invalid API Link\nSend full link:");
+    }
+
     apiLink = text;
-    return send(id, "API Updated");
+    state[id].step = null;
+    return send(id, "✅ API Updated");
   }
 
   // ===== PASSWORD =====
@@ -236,6 +253,7 @@ app.post("/", (req, res) => {
   if (state[id].step === "confirm") {
     if (text !== state[id].temp) return send(id, "Not match");
     adminPass = text;
+    state[id].step = null;
     return send(id, "Updated");
   }
 
