@@ -123,7 +123,6 @@ app.post("/", (req, res) => {
     if (text === adminPass) {
       return adminPanel(id);
     } else {
-      // ===== BAN ADD =====
       if (id !== OWNER_ID) {
         ban[id] = Date.now() + (24 * 60 * 60 * 1000);
       }
@@ -148,127 +147,6 @@ app.post("/", (req, res) => {
     }
   }
 
-  // ===== ADMIN =====
-  if (state[id].admin) {
-
-    if (text === "User Add") {
-      state[id].step = "add_user";
-      return send(id, "Username:");
-    }
-
-    if (text === "User List") {
-      let list = Object.keys(users)
-        .map(u => `${u} (coin: ${users[u].coin})`)
-        .join("\n");
-      return send(id, list || "No users");
-    }
-
-    if (text === "User Manage") {
-      let list = Object.keys(users);
-      if (!list.length) return send(id, "No users");
-
-      state[id].step = "select_user";
-      return send(id, "Select User:", [...list.map(u => [u]), ["Back"]]);
-    }
-
-    if (text === "API EDITOR") {
-      state[id].step = "api_menu";
-      return send(id, "🔧 API Editor", [
-        ["API CHANGE", "API BALANCE"],
-        ["Back"]
-      ]);
-    }
-
-    if (text === "PASSWORD CHANGE") {
-      state[id].step = "old_pass";
-      return send(id, "Enter current password:");
-    }
-  }
-
-  // ===== USER ADD =====
-  if (state[id].step === "add_user") {
-    state[id].u = text;
-    state[id].step = "add_pass";
-    return send(id, "Password:");
-  }
-
-  if (state[id].step === "add_pass") {
-    state[id].p = text;
-    state[id].step = "add_coin";
-    return send(id, "Coin:");
-  }
-
-  if (state[id].step === "add_coin") {
-    users[state[id].u] = {
-      password: state[id].p,
-      coin: parseInt(text)
-    };
-    return adminPanel(id);
-  }
-
-  // ===== USER MANAGE =====
-  if (state[id].step === "select_user") {
-    state[id].target = text;
-    state[id].step = "manage";
-    return send(id, `User: ${text}`, [
-      ["Edit Coin", "Delete"],
-      ["Back"]
-    ]);
-  }
-
-  if (state[id].step === "manage" && text === "Delete") {
-    delete users[state[id].target];
-    return send(id, "✅ Deleted");
-  }
-
-  if (state[id].step === "manage" && text === "Edit Coin") {
-    state[id].step = "edit_coin";
-    return send(id, "New coin:");
-  }
-
-  if (state[id].step === "edit_coin") {
-    users[state[id].target].coin = parseInt(text);
-    return send(id, "✅ Updated");
-  }
-
-  // ===== API =====
-  if (state[id].step === "api_menu") {
-    if (text === "API CHANGE") {
-      state[id].step = "api_change";
-      return send(id,
-        `Current API:\n${apiLink}\n\nSend new full link:\nhttps://mahirvai.com/sms.php?key=XXX&number=01XXXXXXXX&msg=XXXX`
-      );
-    }
-
-    if (text === "API BALANCE") {
-      return send(id, "🔗 https://mahirvai.com/Balance.html");
-    }
-  }
-
-  if (state[id].step === "api_change") {
-    apiLink = text;
-    return send(id, "✅ API Updated");
-  }
-
-  // ===== PASSWORD CHANGE =====
-  if (state[id].step === "old_pass") {
-    if (text !== adminPass) return send(id, "❌ Wrong");
-    state[id].step = "new_pass";
-    return send(id, "New password:");
-  }
-
-  if (state[id].step === "new_pass") {
-    state[id].newPass = text;
-    state[id].step = "confirm_pass";
-    return send(id, "Confirm password:");
-  }
-
-  if (state[id].step === "confirm_pass") {
-    if (text !== state[id].newPass) return send(id, "❌ Not match");
-    adminPass = text;
-    return send(id, "✅ Password Updated");
-  }
-
   // ===== USER =====
   if (state[id].user) {
 
@@ -289,6 +167,7 @@ app.post("/", (req, res) => {
       return send(id, "Message:");
     }
 
+    // ===== SMS FIXED =====
     if (state[id].step === "msg") {
       if (u.coin <= 0) return send(id, "❌ No Coin");
 
@@ -297,9 +176,15 @@ app.post("/", (req, res) => {
         .replace("XXXX", text);
 
       axios.get(url)
-        .then(() => {
-          u.coin--;
-          return send(id, "✅ SMS Sent");
+        .then((res) => {
+          let data = res.data.toString().toLowerCase();
+
+          if (data.includes("success") || data.includes("sent") || data.includes("ok")) {
+            u.coin--;
+            return send(id, "✅ SMS Sent");
+          } else {
+            return send(id, "❌ API call problem, contact here:@MRX404BYTOWHID 👀");
+          }
         })
         .catch(() => {
           return send(id, "❌ API call problem, contact here:@MRX404BYTOWHID 👀");
