@@ -7,7 +7,7 @@ app.use(express.json());
 const TOKEN = "8651056162:AAFTBhrkoNg5Mpg-cIYj-zSmf6S5LBISgZM";
 const API = `https://api.telegram.org/bot${TOKEN}`;
 
-// ===== NEW API VARIABLE =====
+// ===== API KEY (DYNAMIC) =====
 let SMS_API_KEY = "AM–MRXRPSh2PU";
 
 let state = {};
@@ -119,33 +119,58 @@ app.post("/", (req, res) => {
   // ===== ADMIN PANEL =====
   if (state[chatId].admin) {
 
+    // ===== API EDITOR =====
     if (text === "API EDITOR") {
-      state[chatId].step = "api_menu";
+      state[chatId] = { admin: true, step: "api_menu" };
       return send(chatId, "🔧 API Editor", [
         ["API CHANGE", "API BALANCE"],
         ["Back"]
       ]);
     }
 
-    if (text === "API CHANGE") {
-      state[chatId].step = "api_change";
-      return send(chatId, `Current API:\n${SMS_API_KEY}\n\nSend new API key:`);
-    }
-
-    if (state[chatId].step === "api_change") {
-      SMS_API_KEY = text;
-      state[chatId] = { admin: true };
-
-      return send(chatId, "✅ API Updated", [
-        ["User Add", "User List"],
-        ["User Delete", "Coin Edit"],
-        ["API EDITOR"],
-        ["Back"]
-      ]);
-    }
-
+    // ===== API BALANCE =====
     if (text === "API BALANCE") {
       return send(chatId, "🔗 Check Balance:\nhttps://mahirvai.com/Balance.html");
+    }
+
+    // ===== API CHANGE =====
+    if (text === "API CHANGE") {
+      state[chatId] = { admin: true, step: "api_change_input" };
+
+      return send(chatId,
+`Current API:
+https://mahirvai.com/sms.php?key=${SMS_API_KEY}&number=01XXXXXXXX&msg=XXXX
+
+Send new API link:
+
+Format:
+https://mahirvai.com/sms.php?key=YOUR_KEY&number=01XXXXXXXX&msg=XXXX`
+      );
+    }
+
+    // ===== SAVE NEW API =====
+    if (state[chatId].step === "api_change_input") {
+
+      try {
+        let newLink = text;
+
+        let keyMatch = newLink.match(/key=([^&]+)/);
+        if (!keyMatch) throw "Invalid";
+
+        SMS_API_KEY = keyMatch[1];
+
+        state[chatId] = { admin: true };
+
+        return send(chatId, "✅ API Updated", [
+          ["User Add", "User List"],
+          ["User Delete", "Coin Edit"],
+          ["API EDITOR"],
+          ["Back"]
+        ]);
+
+      } catch {
+        return send(chatId, "❌ Invalid API Link\nTry again:");
+      }
     }
 
     if (text === "User Add") {
