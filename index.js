@@ -13,6 +13,9 @@ let users = {};
 let apiLink = "https://mahirvai.com/sms.php?key=AM–MRXRPSh2PU&number=01XXXXXXXX&msg=XXXX";
 let adminPass = "794082";
 
+// ===== DUPLICATE FIX =====
+let lastMsg = {};
+
 // ===== SEND =====
 function send(id, text, keyboard) {
   axios.post(`${API}/sendMessage`, {
@@ -36,7 +39,7 @@ function home(id) {
   ]);
 }
 
-// ===== ADMIN PANEL (NORMAL BUTTON) =====
+// ===== ADMIN PANEL =====
 function adminPanel(id) {
   state[id] = { admin: true, step: null };
 
@@ -73,14 +76,18 @@ app.post("/", async (req, res) => {
   const id = msg.chat.id;
   const text = msg.text;
 
+  // 🔥 DUPLICATE BLOCK
+  if (lastMsg[id] === text) return;
+  lastMsg[id] = text;
+
   if (!state[id]) state[id] = {};
 
   // ===== START =====
   if (text === "/start") return home(id);
 
-  // ===== BACK FIX (FULL FIX) =====
+  // ===== BACK FIX (MAIN FIX) =====
   if (text === "Back") {
-    if (state[id].step) state[id].step = null;
+    state[id].step = null;
 
     if (state[id].admin) return adminPanel(id);
     if (state[id].user) return userPanel(id, state[id].user);
@@ -180,7 +187,7 @@ app.post("/", async (req, res) => {
     return send(id, "✅ User Added");
   }
 
-  // ===== USER MANAGE FIX =====
+  // ===== USER MANAGE =====
   if (state[id].step === "select_user") {
     if (!users[text]) return send(id, "❌ Invalid user");
 
@@ -210,7 +217,7 @@ app.post("/", async (req, res) => {
     return send(id, "✅ Updated");
   }
 
-  // ===== API =====
+  // ===== API FIX (IMPORTANT) =====
   if (state[id].step === "api_menu") {
 
     if (text === "Change API") {
@@ -221,9 +228,14 @@ app.post("/", async (req, res) => {
     if (text === "Balance Link") {
       return send(id, "https://mahirvai.com/Balance.html");
     }
+
+    return; // 🔥 STOP SPAM
   }
 
   if (state[id].step === "api_set") {
+
+    if (text === "Back") return adminPanel(id);
+
     if (!text.includes("http"))
       return send(id, "❌ Invalid Link");
 
