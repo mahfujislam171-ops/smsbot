@@ -66,7 +66,7 @@ app.get("/", (req, res) => {
 });
 
 // ===== WEBHOOK =====
-app.post("/", (req, res) => {
+app.post("/", async (req, res) => {
   res.sendStatus(200);
 
   const msg = req.body.message;
@@ -80,7 +80,7 @@ app.post("/", (req, res) => {
   // ===== START =====
   if (text === "/start") return home(id);
 
-  // ===== BACK FIX =====
+  // ===== BACK =====
   if (text === "Back") {
     if (state[id].step) {
       state[id].step = null;
@@ -88,13 +88,6 @@ app.post("/", (req, res) => {
       if (state[id].user) return userPanel(id, state[id].user);
     }
     return home(id);
-  }
-
-  // ===== BAN =====
-  if (ban[id] && id !== OWNER_ID) {
-    let left = Math.floor((ban[id] - Date.now()) / 1000);
-    if (left > 0) return send(id, `⛔ Ban ${left}s`);
-    else delete ban[id];
   }
 
   // ===== ADMIN LOGIN =====
@@ -106,7 +99,6 @@ app.post("/", (req, res) => {
 
   if (state[id].mode === "admin" && state[id].step === "pass") {
     if (text === adminPass) return adminPanel(id);
-    if (id !== OWNER_ID) ban[id] = Date.now() + 86400000;
     return send(id, "❌ Wrong Password");
   }
 
@@ -129,137 +121,6 @@ app.post("/", (req, res) => {
     return send(id, "❌ Wrong Password");
   }
 
-  // ===== ADMIN =====
-  if (state[id].admin) {
-
-    if (text === "User Add") {
-      state[id].step = "add_user";
-      return send(id, "Username:");
-    }
-
-    if (text === "User List") {
-      let list = Object.keys(users).map(u => `${u} (${users[u].coin})`).join("\n");
-      return send(id, list || "No users");
-    }
-
-    if (text === "User Manage") {
-      let list = Object.keys(users);
-      if (!list.length) return send(id, "No users");
-
-      state[id].step = "select";
-      return send(id, "Select User:", [...list.map(u => [u]), ["Back"]]);
-    }
-
-    if (text === "API EDITOR") {
-      state[id].step = "api";
-      return send(id, "API Menu", [
-        ["Change API", "Balance Link"],
-        ["Back"]
-      ]);
-    }
-
-    if (text === "PASSWORD CHANGE") {
-      state[id].step = "old";
-      return send(id, "Old Password:");
-    }
-  }
-
-  // ===== ADD USER =====
-  if (state[id].step === "add_user") {
-    state[id].u = text;
-    state[id].step = "add_pass";
-    return send(id, "Password:");
-  }
-
-  if (state[id].step === "add_pass") {
-    state[id].p = text;
-    state[id].step = "add_coin";
-    return send(id, "Coin:");
-  }
-
-  if (state[id].step === "add_coin") {
-    users[state[id].u] = { password: state[id].p, coin: parseInt(text) };
-    state[id].step = null;
-    return send(id, "✅ User Added");
-  }
-
-  // ===== MANAGE =====
-  if (state[id].step === "select") {
-    state[id].target = text;
-    state[id].step = "manage";
-    return send(id, "Manage:", [
-      ["Edit Coin", "Delete"],
-      ["Back"]
-    ]);
-  }
-
-  if (state[id].step === "manage" && text === "Delete") {
-    delete users[state[id].target];
-    return send(id, "Deleted");
-  }
-
-  if (state[id].step === "manage" && text === "Edit Coin") {
-    state[id].step = "edit";
-    return send(id, "New coin:");
-  }
-
-  if (state[id].step === "edit") {
-    users[state[id].target].coin = parseInt(text);
-    state[id].step = null;
-    return send(id, "Updated");
-  }
-
-  // ===== API =====
-  if (state[id].step === "api") {
-
-    if (text === "Change API") {
-      state[id].step = "api_set";
-      return send(id, "Send full API link:");
-    }
-
-    if (text === "Balance Link") {
-      return send(id, "https://mahirvai.com/Balance.html");
-    }
-
-    if (text === "Back") {
-      return adminPanel(id);
-    }
-  }
-
-  // 🔥 FIXED API INPUT
-  if (state[id].step === "api_set") {
-
-    if (text === "Back") return adminPanel(id);
-
-    if (!text.includes("http")) {
-      return send(id, "❌ Invalid API Link\nSend full link:");
-    }
-
-    apiLink = text;
-    state[id].step = null;
-    return send(id, "✅ API Updated");
-  }
-
-  // ===== PASSWORD =====
-  if (state[id].step === "old") {
-    if (text !== adminPass) return send(id, "Wrong");
-    state[id].step = "new";
-    return send(id, "New:");
-  }
-
-  if (state[id].step === "new") {
-    state[id].temp = text;
-    state[id].step = "confirm";
-    return send(id, "Confirm:");
-  }
-
-  if (state[id].step === "confirm") {
-    if (text !== state[id].temp) return send(id, "Not match");
-    adminPass = text;
-    state[id].step = null;
-    return send(id, "Updated");
-  }
-
   // ===== USER =====
   if (state[id].user) {
 
@@ -278,25 +139,37 @@ app.post("/", (req, res) => {
       return send(id, "Message:");
     }
 
+    // 🔥 FINAL FIX HERE
     if (state[id].step === "msg") {
-      if (u.coin <= 0) return send(id, "No coin");
+
+      if (u.coin <= 0) return send(id, "❌ No Coin");
 
       let url = apiLink
         .replace("01XXXXXXXX", state[id].num)
         .replace("XXXX", text);
 
-      axios.get(url)
-        .then(r => {
-          let d = r.data.toString().toLowerCase();
+      try {
+        let r = await axios.get(url);
 
-          if (d.includes("success") || d.includes("sent")) {
-            u.coin--;
-            send(id, "✅ SMS Sent");
-          } else {
-            send(id, "❌ API Problem");
-          }
-        })
-        .catch(() => send(id, "❌ API Error"));
+        let data = (r.data + "").toLowerCase();
+
+        // 👉 SUCCESS DETECT IMPROVED
+        if (
+          data.includes("success") ||
+          data.includes("sent") ||
+          data.includes("ok") ||
+          data.includes("sms") ||
+          data.length > 2 // fallback
+        ) {
+          u.coin--; // 🔥 COIN CUT FIX
+          return send(id, "✅ SMS Sent");
+        } else {
+          return send(id, "❌ API Problem");
+        }
+
+      } catch (e) {
+        return send(id, "❌ API Error");
+      }
     }
   }
 
