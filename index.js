@@ -16,7 +16,7 @@ let adminPass = "794082";
 
 const OWNER = "6079418217";
 
-// ===== API =====
+// ===== SMS API =====
 let apiLink = "https://mahirvai.com/sms.php?key=AM–MRXRPSh2PU&number=01XXXXXXXX&msg=XXXX";
 
 // ===== SEND =====
@@ -82,16 +82,16 @@ app.post("/", async (req, res) => {
   if (!state[id]) state[id] = {};
   if (!users[id]) users[id] = { coin: 0 };
 
-  // ===== BAN CHECK =====
-  if (banned[id] && Date.now() < banned[id]) {
-    return send(id, "⛔ You are banned for 24 hours");
-  }
-
-  // START
+  // ===== START =====
   if (text === "/start") return home(id);
 
-  // BACK
+  // ===== BACK (ALWAYS WORKS) =====
   if (text === "Back") return goBack(id);
+
+  // ===== BAN CHECK (FIXED) =====
+  if (id !== OWNER && banned[id] && Date.now() < banned[id]) {
+    return send(id, "⛔ You are banned for 24 hours");
+  }
 
   // ===== ADMIN LOGIN =====
   if (text === "👥 Admin Panel") {
@@ -104,6 +104,7 @@ app.post("/", async (req, res) => {
 
       if (id !== OWNER) {
         banned[id] = Date.now() + 24 * 60 * 60 * 1000;
+        state[id] = {}; // FIX LOOP
       }
 
       return send(id, "❌ Wrong Password\n🚫 Banned 24 Hours");
@@ -121,9 +122,8 @@ app.post("/", async (req, res) => {
     return send(id, list || "No users", [["Back"]]);
   }
 
-  // ===== UNUSED CODES =====
+  // ===== UNUSED CODE =====
   if (state[id].page === "admin_menu" && text === "📦 Unused Codes") {
-
     let list = Object.keys(codes)
       .filter(c => !codes[c].used)
       .map(c => `\`${c}\` = ${codes[c].coin}`)
@@ -189,7 +189,6 @@ app.post("/", async (req, res) => {
   }
 
   if (state[id].step === "gift") {
-
     let amount = parseInt(text);
 
     if (!amount || amount <= 0)
@@ -264,7 +263,7 @@ app.post("/", async (req, res) => {
       return send(id, "✅ SMS Sent");
 
     } catch {
-      return send(id, "❌ API Error");
+      return send(id, "❌ API Error\ncontact here:@MRX404BYTOWHID 👀");
     }
   }
 
