@@ -8,13 +8,13 @@ const TOKEN = "8651056162:AAFONElzDzw2YKcMqvQdJZ76htnzRHQQ8Jk";
 const API = `https://api.telegram.org/bot${TOKEN}`;
 
 // ===== DATA =====
-let state = {};
 let users = {};
-let apiLink = "https://mahirvai.com/sms.php?key=XXX&number=01XXXXXXXX&msg=XXXX";
+let state = {};
+let codes = {};
 let adminPass = "794082";
 
-// 🔥 ANTI SPAM
-let lastMsg = {};
+// 👉 SMS API
+let apiLink = "https://mahirvai.com/sms.php?key=XXX&number=01XXXXXXXX&msg=XXXX";
 
 // ===== SEND =====
 function send(id, text, keyboard) {
@@ -30,29 +30,20 @@ function send(id, text, keyboard) {
 // ===== HOME =====
 function home(id) {
   state[id] = {};
-  send(id, "স্বাগতম 👇", [
-    ["Admin Login"],
-    ["User Login"]
+  if (!users[id]) users[id] = { coin: 0, name: "User" };
+
+  send(id, "👇 Please Select Your Choice", [
+    ["📨 Send Custom Sms"],
+    ["🎁 Gift Coin", "💌 Redeem Code"],
+    ["👤 My Account"],
+    ["🎉 Bonus", "👥 Admin Panel"]
   ]);
 }
 
-// ===== PANELS =====
-function adminPanel(id) {
-  state[id] = { admin: true, step: null };
-  send(id, "✅ Admin Panel", [
-    ["User Add", "User List"],
-    ["User Manage"],
-    ["API Editor", "Password Change"],
-    ["Back"]
-  ]);
-}
-
-function userPanel(id, user) {
-  state[id] = { user, step: null };
-  send(id, "✅ User Panel", [
-    ["Send SMS", "Balance"],
-    ["Back"]
-  ]);
+// ===== BACK SYSTEM =====
+function goBack(id) {
+  state[id].step = null;
+  return home(id);
 }
 
 // ===== SERVER =====
@@ -65,241 +56,142 @@ app.post("/", async (req, res) => {
   const id = msg.chat.id;
   const text = msg.text;
 
-  // 🔥 DUPLICATE FIX
-  if (lastMsg[id] === msg.message_id) return;
-  lastMsg[id] = msg.message_id;
-
   if (!state[id]) state[id] = {};
+  if (!users[id]) users[id] = { coin: 0, name: "User" };
 
   // ===== START =====
   if (text === "/start") return home(id);
 
   // ===== BACK =====
-  if (text === "Back") {
-    state[id].step = null;
+  if (text === "Back") return goBack(id);
 
-    if (state[id].admin) return adminPanel(id);
-    if (state[id].user) return userPanel(id, state[id].user);
-
-    return home(id);
+  // ===== ADMIN PANEL =====
+  if (text === "👥 Admin Panel") {
+    state[id] = { step: "admin_pass" };
+    return send(id, "🔐 Enter Admin Password:", [["Back"]]);
   }
 
-  // 🔥 LOCK SYSTEM (flow break stop)
-  if (state[id].step && 
-      !["Back"].includes(text) &&
-      !state[id].allowFree) {
+  if (state[id].step === "admin_pass") {
+    if (text !== adminPass)
+      return send(id, "❌ Wrong Password");
 
-    // শুধু expected step input ছাড়া কিছু নিলে ignore
-    if (!/^[0-9a-zA-Z@._ -]+$/.test(text)) {
-      return;
-    }
-  }
+    state[id].step = "admin_menu";
 
-  // ===== ADMIN LOGIN =====
-  if (text === "Admin Login") {
-    state[id] = { mode: "admin", step: "pass" };
-    return send(id, "Enter Admin Password:");
-  }
-
-  if (state[id].mode === "admin" && state[id].step === "pass") {
-    if (text === adminPass) return adminPanel(id);
-    return send(id, "❌ Wrong Password");
-  }
-
-  // ===== USER LOGIN =====
-  if (text === "User Login") {
-    state[id] = { mode: "user", step: "id" };
-    return send(id, "Enter ID:");
-  }
-
-  if (state[id].mode === "user" && state[id].step === "id") {
-    state[id].loginUser = text;
-    state[id].step = "pass";
-    return send(id, "Enter Password:");
-  }
-
-  if (state[id].mode === "user" && state[id].step === "pass") {
-    let u = users[state[id].loginUser];
-    if (u && u.password === text)
-      return userPanel(id, state[id].loginUser);
-
-    return send(id, "❌ Wrong Password");
-  }
-
-  // ===== ADMIN =====
-  if (state[id].admin) {
-
-    if (text === "User Add") {
-      state[id].step = "add_user";
-      return send(id, "Username:");
-    }
-
-    if (text === "User List") {
-      let list = Object.keys(users)
-        .map(u => `${u} (${users[u].coin})`)
-        .join("\n");
-
-      return send(id, list || "No users");
-    }
-
-    if (text === "User Manage") {
-      let list = Object.keys(users);
-      if (!list.length) return send(id, "No users");
-
-      state[id].step = "select_user";
-      return send(id, "Select User:", [...list.map(u => [u]), ["Back"]]);
-    }
-
-    if (text === "API Editor") {
-      state[id].step = "api_menu";
-      return send(id, "API Menu", [
-        ["Change API", "Balance Link"],
-        ["Back"]
-      ]);
-    }
-
-    if (text === "Password Change") {
-      state[id].step = "old_pass";
-      return send(id, "Old Password:");
-    }
-  }
-
-  // ===== USER ADD =====
-  if (state[id].step === "add_user") {
-    state[id].u = text;
-    state[id].step = "add_pass";
-    return send(id, "Password:");
-  }
-
-  if (state[id].step === "add_pass") {
-    state[id].p = text;
-    state[id].step = "add_coin";
-    return send(id, "Coin:");
-  }
-
-  if (state[id].step === "add_coin") {
-    users[state[id].u] = {
-      password: state[id].p,
-      coin: parseInt(text)
-    };
-
-    state[id].step = null;
-    return send(id, "✅ User Added");
-  }
-
-  // ===== USER MANAGE =====
-  if (state[id].step === "select_user") {
-    if (!users[text]) return send(id, "❌ Invalid user");
-
-    state[id].target = text;
-    state[id].step = "manage_user";
-
-    return send(id, `User: ${text}`, [
-      ["Edit Coin", "Delete"],
+    return send(id, "✅ Admin Panel", [
+      ["👤 User List"],
+      ["🎟 Generate Code"],
       ["Back"]
     ]);
   }
 
-  if (state[id].step === "manage_user" && text === "Delete") {
-    delete users[state[id].target];
+  // ===== USER LIST =====
+  if (state[id].step === "admin_menu" && text === "👤 User List") {
+    let list = Object.keys(users)
+      .map(u => `${u} = ${users[u].coin}`)
+      .join("\n");
+
+    return send(id, list || "No users", [["Back"]]);
+  }
+
+  // ===== GENERATE CODE =====
+  if (state[id].step === "admin_menu" && text === "🎟 Generate Code") {
+    state[id].step = "gen_coin";
+    return send(id, "Enter Coin Amount:", [["Back"]]);
+  }
+
+  if (state[id].step === "gen_coin") {
+    let amount = parseInt(text);
+
+    let code = Math.random().toString(36).substring(2, 10).toUpperCase();
+
+    codes[code] = {
+      coin: amount,
+      used: false
+    };
+
+    state[id].step = "admin_menu";
+
+    return send(id, `✅ Code Generated\n\nCode: ${code}\nCoin: ${amount}`, [["Back"]]);
+  }
+
+  // ===== REDEEM =====
+  if (text === "💌 Redeem Code") {
+    state[id].step = "redeem";
+    return send(id, "Enter Code:", [["Back"]]);
+  }
+
+  if (state[id].step === "redeem") {
+    let c = codes[text];
+
+    if (!c) return send(id, "❌ Invalid Code");
+
+    if (c.used) return send(id, "❌ Already Used");
+
+    users[id].coin += c.coin;
+    c.used = true;
+
     state[id].step = null;
-    return send(id, "✅ Deleted");
+
+    return send(id, `✅ Redeemed ${c.coin} Coin`);
   }
 
-  if (state[id].step === "manage_user" && text === "Edit Coin") {
-    state[id].step = "edit_coin";
-    return send(id, "New coin:");
+  // ===== ACCOUNT =====
+  if (text === "👤 My Account") {
+    let u = users[id];
+
+    return send(id,
+`👤 Hello ${u.name}
+🆔 ID: ${id}
+💰 Balance: ${u.coin}`);
   }
 
-  if (state[id].step === "edit_coin") {
-    users[state[id].target].coin = parseInt(text);
-    state[id].step = null;
-    return send(id, "✅ Updated");
-  }
+  // ===== BONUS (ANTI SPAM) =====
+  if (text === "🎉 Bonus") {
+    let now = Date.now();
 
-  // ===== API =====
-  if (state[id].step === "api_menu") {
+    if (!users[id].lastBonus)
+      users[id].lastBonus = 0;
 
-    if (text === "Change API") {
-      state[id].step = "api_set";
-      return send(id, "Send full API link:");
+    if (now - users[id].lastBonus < 86400000) {
+      return send(id, "⏳ Already claimed today");
     }
 
-    if (text === "Balance Link") {
-      return send(id, "https://mahirvai.com/Balance.html");
-    }
+    users[id].lastBonus = now;
+    users[id].coin += 1;
+
+    return send(id, "🎉 1 Coin Added");
   }
 
-  if (state[id].step === "api_set") {
-    if (!text.includes("http"))
-      return send(id, "❌ Invalid Link");
-
-    apiLink = text;
-    state[id].step = null;
-    return send(id, "✅ API Updated");
+  // ===== SMS =====
+  if (text === "📨 Send Custom Sms") {
+    state[id].step = "num";
+    return send(id, "Enter Number:", [["Back"]]);
   }
 
-  // ===== PASSWORD =====
-  if (state[id].step === "old_pass") {
-    if (text !== adminPass) return send(id, "❌ Wrong");
-
-    state[id].step = "new_pass";
-    return send(id, "New Password:");
+  if (state[id].step === "num") {
+    state[id].num = text;
+    state[id].step = "msg";
+    return send(id, "Enter Message:", [["Back"]]);
   }
 
-  if (state[id].step === "new_pass") {
-    state[id].temp = text;
-    state[id].step = "confirm_pass";
-    return send(id, "Confirm:");
-  }
+  if (state[id].step === "msg") {
 
-  if (state[id].step === "confirm_pass") {
-    if (text !== state[id].temp)
-      return send(id, "❌ Not match");
+    if (users[id].coin <= 0)
+      return send(id, "❌ No Coin");
 
-    adminPass = text;
-    state[id].step = null;
-    return send(id, "✅ Password Updated");
-  }
+    let url = apiLink
+      .replace("01XXXXXXXX", state[id].num)
+      .replace("XXXX", text);
 
-  // ===== USER =====
-  if (state[id].user) {
+    try {
+      await axios.get(url);
+      users[id].coin--;
 
-    let u = users[state[id].user];
+      state[id].step = null;
 
-    if (text === "Balance")
-      return send(id, `💰 ${u.coin}`);
-
-    if (text === "Send SMS") {
-      state[id].step = "num";
-      return send(id, "Number:");
-    }
-
-    if (state[id].step === "num") {
-      state[id].num = text;
-      state[id].step = "msg";
-      return send(id, "Message:");
-    }
-
-    if (state[id].step === "msg") {
-
-      if (u.coin <= 0)
-        return send(id, "❌ No Coin");
-
-      let url = apiLink
-        .replace("01XXXXXXXX", state[id].num)
-        .replace("XXXX", text);
-
-      try {
-        await axios.get(url);
-        u.coin--;
-
-        state[id].step = null;
-        return send(id, "✅ SMS Sent");
-
-      } catch {
-        return send(id, "❌ API Error\ncontact here:@MRX404BYTOWHID 👀");
-      }
+      return send(id, "✅ SMS Sent");
+    } catch {
+      return send(id, "❌ API Error");
     }
   }
 
