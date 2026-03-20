@@ -11,16 +11,19 @@ const API = `https://api.telegram.org/bot${TOKEN}`;
 let users = {};
 let state = {};
 let codes = {};
+let banned = {};
 let adminPass = "794082";
 
-// ===== YOUR API (UNCHANGED) =====
+const OWNER = "6079418217";
+
+// ===== API =====
 let apiLink = "https://mahirvai.com/sms.php?key=AM–MRXRPSh2PU&number=01XXXXXXXX&msg=XXXX";
 
 // ===== SEND =====
 function send(id, text, keyboard) {
   axios.post(`${API}/sendMessage`, {
     chat_id: id,
-    text: text,
+    text,
     parse_mode: "Markdown",
     reply_markup: keyboard
       ? { keyboard, resize_keyboard: true }
@@ -49,7 +52,7 @@ function goBack(id) {
   if (page === "admin_login") return home(id);
   if (page === "gen_code") return adminMenu(id);
   if (page === "user_manage") return adminMenu(id);
-  if (page === "user_action") return adminMenu(id);
+  if (page === "unused") return adminMenu(id);
 
   return home(id);
 }
@@ -61,6 +64,7 @@ function adminMenu(id) {
   send(id, "✅ Admin Panel", [
     ["👤 User List"],
     ["🎟 Generate Code"],
+    ["📦 Unused Codes"],
     ["Back"]
   ]);
 }
@@ -72,11 +76,16 @@ app.post("/", async (req, res) => {
   const msg = req.body.message;
   if (!msg || !msg.text) return;
 
-  const id = msg.chat.id;
+  const id = msg.chat.id.toString();
   const text = msg.text;
 
   if (!state[id]) state[id] = {};
   if (!users[id]) users[id] = { coin: 0 };
+
+  // ===== BAN CHECK =====
+  if (banned[id] && Date.now() < banned[id]) {
+    return send(id, "⛔ You are banned for 24 hours");
+  }
 
   // START
   if (text === "/start") return home(id);
@@ -84,51 +93,48 @@ app.post("/", async (req, res) => {
   // BACK
   if (text === "Back") return goBack(id);
 
-  // ADMIN LOGIN
+  // ===== ADMIN LOGIN =====
   if (text === "👥 Admin Panel") {
     state[id] = { step: "admin_pass", page: "admin_login" };
     return send(id, "🔐 Enter Admin Password:", [["Back"]]);
   }
 
   if (state[id].step === "admin_pass") {
-    if (text !== adminPass)
-      return send(id, "❌ Wrong Password");
+    if (text !== adminPass) {
 
-    return adminMenu(id);
-  }
+      if (id !== OWNER) {
+        banned[id] = Date.now() + 24 * 60 * 60 * 1000;
+      }
 
-  // USER LIST
-  if (state[id].page === "admin_menu" && text === "👤 User List") {
-    let list = Object.keys(users);
-
-    if (!list.length) return send(id, "No users", [["Back"]]);
-
-    state[id] = { page: "user_manage" };
-
-    return send(id, "Select User:", [
-      ...list.map(u => [u]),
-      ["Back"]
-    ]);
-  }
-
-  if (state[id].page === "user_manage") {
-    if (users[text]) {
-      state[id].target = text;
-      state[id].page = "user_action";
-
-      return send(id, `User: ${text}`, [
-        ["❌ Delete User"],
-        ["Back"]
-      ]);
+      return send(id, "❌ Wrong Password\n🚫 Banned 24 Hours");
     }
-  }
 
-  if (state[id].page === "user_action" && text === "❌ Delete User") {
-    delete users[state[id].target];
     return adminMenu(id);
   }
 
-  // GENERATE CODE
+  // ===== USER LIST =====
+  if (state[id].page === "admin_menu" && text === "👤 User List") {
+    let list = Object.keys(users)
+      .map(u => `${u} = ${users[u].coin}`)
+      .join("\n");
+
+    return send(id, list || "No users", [["Back"]]);
+  }
+
+  // ===== UNUSED CODES =====
+  if (state[id].page === "admin_menu" && text === "📦 Unused Codes") {
+
+    let list = Object.keys(codes)
+      .filter(c => !codes[c].used)
+      .map(c => `\`${c}\` = ${codes[c].coin}`)
+      .join("\n");
+
+    state[id].page = "unused";
+
+    return send(id, list || "No unused code", [["Back"]]);
+  }
+
+  // ===== GENERATE CODE =====
   if (state[id].page === "admin_menu" && text === "🎟 Generate Code") {
     state[id] = { page: "gen_code" };
     return send(id, "Enter Coin Amount:", [["Back"]]);
@@ -149,13 +155,12 @@ app.post("/", async (req, res) => {
     return send(id,
 `✅ Code Generated
 
-📋 Tap to copy:
 \`${code}\`
 
 💰 Coin: ${amount}`, [["Back"]]);
   }
 
-  // REDEEM
+  // ===== REDEEM =====
   if (text === "💌 Redeem Code") {
     state[id] = { step: "redeem", page: "redeem" };
     return send(id, "Enter Code:", [["Back"]]);
@@ -173,7 +178,7 @@ app.post("/", async (req, res) => {
     return send(id, `✅ ${c.coin} Coin Added`);
   }
 
-  // GIFT COIN
+  // ===== GIFT =====
   if (text === "🎁 Gift Coin") {
 
     if (users[id].coin <= 0)
@@ -204,20 +209,19 @@ app.post("/", async (req, res) => {
     return send(id,
 `🎁 YOUR CODE
 
-📋 Tap to copy:
 \`${code}\`
 
 💰 Coin: ${amount}`);
   }
 
-  // ACCOUNT
+  // ===== ACCOUNT =====
   if (text === "👤 My Account") {
     return send(id,
 `👤 ID: ${id}
 💰 Balance: ${users[id].coin}`);
   }
 
-  // BONUS
+  // ===== BONUS =====
   if (text === "🎉 Bonus") {
     let now = Date.now();
 
@@ -232,7 +236,7 @@ app.post("/", async (req, res) => {
     return send(id, "🎉 Bonus Added");
   }
 
-  // SMS
+  // ===== SMS =====
   if (text === "📨 Send Custom Sms") {
     state[id] = { step: "num", page: "sms" };
     return send(id, "Enter Number:", [["Back"]]);
