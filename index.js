@@ -4,7 +4,7 @@ const axios = require("axios");
 const app = express();
 app.use(express.json());
 
-const TOKEN = "YOUR_BOT_TOKEN";
+const TOKEN = "8651056162:AAFONElzDzw2YKcMqvQdJZ76htnzRHQQ8Jk";
 const API = `https://api.telegram.org/bot${TOKEN}`;
 
 // ===== DATA =====
@@ -13,15 +13,17 @@ let users = {};
 let apiLink = "https://mahirvai.com/sms.php?key=XXX&number=01XXXXXXXX&msg=XXXX";
 let adminPass = "794082";
 
-// 🔥 MAIN FIX
-let lastUpdate = 0;
+// 🔥 ANTI SPAM
+let lastMsg = {};
 
 // ===== SEND =====
 function send(id, text, keyboard) {
   axios.post(`${API}/sendMessage`, {
     chat_id: id,
     text,
-    reply_markup: keyboard ? { keyboard, resize_keyboard: true } : undefined,
+    reply_markup: keyboard
+      ? { keyboard, resize_keyboard: true }
+      : undefined,
   }).catch(() => {});
 }
 
@@ -56,21 +58,24 @@ function userPanel(id, user) {
   ]);
 }
 
+// ===== SERVER =====
+app.get("/", (req, res) => {
+  res.send("Bot Running ✅");
+});
+
 // ===== WEBHOOK =====
 app.post("/", async (req, res) => {
   res.sendStatus(200);
 
-  const update = req.body;
-
-  // 🔥 DUPLICATE UPDATE BLOCK
-  if (update.update_id <= lastUpdate) return;
-  lastUpdate = update.update_id;
-
-  const msg = update.message;
+  const msg = req.body.message;
   if (!msg || !msg.text) return;
 
   const id = msg.chat.id;
   const text = msg.text;
+
+  // 🔥 ANTI DUPLICATE FIX
+  if (lastMsg[id] === msg.message_id) return;
+  lastMsg[id] = msg.message_id;
 
   if (!state[id]) state[id] = {};
 
@@ -79,11 +84,7 @@ app.post("/", async (req, res) => {
 
   // ===== BACK FIX =====
   if (text === "Back") {
-    state[id].step = null;
-
-    if (state[id].admin) return adminPanel(id);
-    if (state[id].user) return userPanel(id, state[id].user);
-
+    state[id] = {};
     return home(id);
   }
 
@@ -112,7 +113,9 @@ app.post("/", async (req, res) => {
 
   if (state[id].mode === "user" && state[id].step === "pass") {
     let u = users[state[id].loginUser];
-    if (u && u.password === text) return userPanel(id, state[id].loginUser);
+    if (u && u.password === text)
+      return userPanel(id, state[id].loginUser);
+
     return send(id, "❌ Wrong Password");
   }
 
@@ -125,7 +128,10 @@ app.post("/", async (req, res) => {
     }
 
     if (text === "User List") {
-      let list = Object.keys(users).map(u => `${u} (${users[u].coin})`).join("\n");
+      let list = Object.keys(users)
+        .map(u => `${u} (${users[u].coin})`)
+        .join("\n");
+
       return send(id, list || "No users");
     }
 
@@ -151,7 +157,7 @@ app.post("/", async (req, res) => {
     }
   }
 
-  // ===== USER ADD FIX =====
+  // ===== USER ADD =====
   if (state[id].step === "add_user") {
     state[id].u = text;
     state[id].step = "add_pass";
@@ -174,7 +180,37 @@ app.post("/", async (req, res) => {
     return send(id, "✅ User Added");
   }
 
-  // ===== API FIX =====
+  // ===== USER MANAGE =====
+  if (state[id].step === "select_user") {
+    if (!users[text]) return send(id, "❌ Invalid user");
+
+    state[id].target = text;
+    state[id].step = "manage_user";
+
+    return send(id, `User: ${text}`, [
+      ["Edit Coin", "Delete"],
+      ["Back"]
+    ]);
+  }
+
+  if (state[id].step === "manage_user" && text === "Delete") {
+    delete users[state[id].target];
+    state[id].step = null;
+    return send(id, "✅ Deleted");
+  }
+
+  if (state[id].step === "manage_user" && text === "Edit Coin") {
+    state[id].step = "edit_coin";
+    return send(id, "New coin:");
+  }
+
+  if (state[id].step === "edit_coin") {
+    users[state[id].target].coin = parseInt(text);
+    state[id].step = null;
+    return send(id, "✅ Updated");
+  }
+
+  // ===== API =====
   if (state[id].step === "api_menu") {
 
     if (text === "Change API") {
@@ -185,18 +221,38 @@ app.post("/", async (req, res) => {
     if (text === "Balance Link") {
       return send(id, "https://mahirvai.com/Balance.html");
     }
-
-    return;
   }
 
   if (state[id].step === "api_set") {
-
     if (!text.includes("http"))
       return send(id, "❌ Invalid Link");
 
     apiLink = text;
     state[id].step = null;
     return send(id, "✅ API Updated");
+  }
+
+  // ===== PASSWORD =====
+  if (state[id].step === "old_pass") {
+    if (text !== adminPass) return send(id, "❌ Wrong");
+
+    state[id].step = "new_pass";
+    return send(id, "New Password:");
+  }
+
+  if (state[id].step === "new_pass") {
+    state[id].temp = text;
+    state[id].step = "confirm_pass";
+    return send(id, "Confirm:");
+  }
+
+  if (state[id].step === "confirm_pass") {
+    if (text !== state[id].temp)
+      return send(id, "❌ Not match");
+
+    adminPass = text;
+    state[id].step = null;
+    return send(id, "✅ Password Updated");
   }
 
   // ===== USER =====
@@ -235,7 +291,7 @@ app.post("/", async (req, res) => {
         return send(id, "✅ SMS Sent");
 
       } catch {
-        return send(id, "❌ API Error");
+        return send(id, "❌ API Error\ncontact here:@MRX404BYTOWHID 👀");
       }
     }
   }
