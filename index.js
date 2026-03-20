@@ -36,11 +36,10 @@ function home(id) {
   ]);
 }
 
-// ===== ADMIN PANEL =====
+// ===== PANELS =====
 function adminPanel(id) {
   state[id] = { admin: true, step: null };
-
-  send(id, "✅ Admin Panel 👇", [
+  send(id, "✅ Admin Panel", [
     ["User Add", "User List"],
     ["User Manage"],
     ["API Editor", "Password Change"],
@@ -48,10 +47,8 @@ function adminPanel(id) {
   ]);
 }
 
-// ===== USER PANEL =====
 function userPanel(id, user) {
   state[id] = { user, step: null };
-
   send(id, "✅ User Panel", [
     ["Send SMS", "Balance"],
     ["Back"]
@@ -59,11 +56,6 @@ function userPanel(id, user) {
 }
 
 // ===== SERVER =====
-app.get("/", (req, res) => {
-  res.send("Bot Running ✅");
-});
-
-// ===== WEBHOOK =====
 app.post("/", async (req, res) => {
   res.sendStatus(200);
 
@@ -73,7 +65,7 @@ app.post("/", async (req, res) => {
   const id = msg.chat.id;
   const text = msg.text;
 
-  // 🔥 ANTI DUPLICATE FIX
+  // 🔥 DUPLICATE FIX
   if (lastMsg[id] === msg.message_id) return;
   lastMsg[id] = msg.message_id;
 
@@ -82,10 +74,25 @@ app.post("/", async (req, res) => {
   // ===== START =====
   if (text === "/start") return home(id);
 
-  // ===== BACK FIX =====
+  // ===== BACK =====
   if (text === "Back") {
-    state[id] = {};
+    state[id].step = null;
+
+    if (state[id].admin) return adminPanel(id);
+    if (state[id].user) return userPanel(id, state[id].user);
+
     return home(id);
+  }
+
+  // 🔥 LOCK SYSTEM (flow break stop)
+  if (state[id].step && 
+      !["Back"].includes(text) &&
+      !state[id].allowFree) {
+
+    // শুধু expected step input ছাড়া কিছু নিলে ignore
+    if (!/^[0-9a-zA-Z@._ -]+$/.test(text)) {
+      return;
+    }
   }
 
   // ===== ADMIN LOGIN =====
