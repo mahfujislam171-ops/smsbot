@@ -20,7 +20,7 @@ let apiLink = "https://mahirvai.com/sms.php?key=XXX&number=01XXXXXXXX&msg=XXXX";
 function send(id, text, keyboard) {
   axios.post(`${API}/sendMessage`, {
     chat_id: id,
-    text,
+    text: text,
     reply_markup: keyboard
       ? { keyboard, resize_keyboard: true }
       : undefined,
@@ -40,7 +40,7 @@ function home(id) {
   ]);
 }
 
-// ===== BACK SYSTEM (FIXED) =====
+// ===== BACK =====
 function goBack(id) {
   let page = state[id].page;
 
@@ -94,7 +94,7 @@ app.post("/", async (req, res) => {
     return adminMenu(id);
   }
 
-  // ===== USER LIST + DELETE =====
+  // ===== USER LIST =====
   if (state[id].page === "admin_menu" && text === "👤 User List") {
     let list = Object.keys(users);
 
@@ -109,7 +109,6 @@ app.post("/", async (req, res) => {
   }
 
   if (state[id].page === "user_manage") {
-
     if (users[text]) {
       state[id].target = text;
       state[id].page = "user_action";
@@ -134,6 +133,9 @@ app.post("/", async (req, res) => {
 
   if (state[id].page === "gen_code") {
     let amount = parseInt(text);
+
+    if (!amount || amount <= 0)
+      return send(id, "❌ Invalid Amount");
 
     let random = Math.random().toString(36).substring(2, 6).toUpperCase();
     let code = `TABASSUM-${random}`;
@@ -167,17 +169,31 @@ Coin: ${amount}`, [["Back"]]);
     users[id].coin += c.coin;
     c.used = true;
 
-    return home(id);
+    return send(id, `✅ ${c.coin} Coin Added`);
   }
 
   // ===== GIFT COIN (FIXED) =====
   if (text === "🎁 Gift Coin") {
+
+    if (users[id].coin <= 0)
+      return send(id, "❌ No Coin");
+
     state[id] = { step: "gift", page: "gift" };
     return send(id, "Enter Coin Amount:", [["Back"]]);
   }
 
   if (state[id].step === "gift") {
+
     let amount = parseInt(text);
+
+    if (!amount || amount <= 0)
+      return send(id, "❌ Invalid Amount");
+
+    if (users[id].coin < amount)
+      return send(id, "❌ Not Enough Coin");
+
+    // coin deduct
+    users[id].coin -= amount;
 
     let random = Math.random().toString(36).substring(2, 6).toUpperCase();
     let code = `TABASSUM-${random}`;
@@ -243,10 +259,10 @@ Coin: ${amount}`);
       await axios.get(url);
       users[id].coin--;
 
-      return home(id);
+      return send(id, "✅ SMS Sent");
 
     } catch {
-      return send(id, "❌ API Error");
+      return send(id, "❌ API Error\ncontact here:@MRX404BYTOWHID 👀");
     }
   }
 
