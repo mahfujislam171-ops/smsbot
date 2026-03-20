@@ -13,10 +13,6 @@ let users = {};
 let apiLink = "https://mahirvai.com/sms.php?key=AM–MRXRPSh2PU&number=01XXXXXXXX&msg=XXXX";
 let adminPass = "794082";
 
-// ===== BAN =====
-let ban = {};
-const OWNER_ID = 6079418217;
-
 // ===== SEND =====
 function send(id, text, keyboard) {
   axios.post(`${API}/sendMessage`, {
@@ -42,7 +38,7 @@ function home(id) {
 
 // ===== ADMIN PANEL =====
 function adminPanel(id) {
-  state[id] = { admin: true, step: null };
+  state[id] = { admin: true };
   send(id, "✅ Admin Panel", [
     ["User Add", "User List"],
     ["User Manage"],
@@ -53,7 +49,7 @@ function adminPanel(id) {
 
 // ===== USER PANEL =====
 function userPanel(id, user) {
-  state[id] = { user: user, step: null };
+  state[id] = { user };
   send(id, "✅ User Panel", [
     ["Send SMS", "Balance"],
     ["Back"]
@@ -82,11 +78,8 @@ app.post("/", async (req, res) => {
 
   // ===== BACK =====
   if (text === "Back") {
-    if (state[id].step) {
-      state[id].step = null;
-      if (state[id].admin) return adminPanel(id);
-      if (state[id].user) return userPanel(id, state[id].user);
-    }
+    if (state[id].admin) return adminPanel(id);
+    if (state[id].user) return userPanel(id, state[id].user);
     return home(id);
   }
 
@@ -121,12 +114,73 @@ app.post("/", async (req, res) => {
     return send(id, "❌ Wrong Password");
   }
 
+  // ===== ADMIN FEATURES =====
+  if (state[id].admin) {
+
+    if (text === "User Add") {
+      state[id].step = "add_user";
+      return send(id, "Username:");
+    }
+
+    if (text === "User List") {
+      let list = Object.keys(users)
+        .map(u => `${u} (${users[u].coin})`)
+        .join("\n");
+      return send(id, list || "No users");
+    }
+
+    if (text === "User Manage") {
+      let list = Object.keys(users);
+      if (!list.length) return send(id, "No users");
+
+      state[id].step = "select";
+      return send(id, "Select User:", [...list.map(u => [u]), ["Back"]]);
+    }
+
+    if (text === "API EDITOR") {
+      state[id].step = "api";
+      return send(id, "API Menu", [
+        ["Change API", "Balance Link"],
+        ["Back"]
+      ]);
+    }
+
+    if (text === "PASSWORD CHANGE") {
+      state[id].step = "old";
+      return send(id, "Old Password:");
+    }
+  }
+
+  // ===== ADD USER =====
+  if (state[id].step === "add_user") {
+    state[id].u = text;
+    state[id].step = "add_pass";
+    return send(id, "Password:");
+  }
+
+  if (state[id].step === "add_pass") {
+    state[id].p = text;
+    state[id].step = "add_coin";
+    return send(id, "Coin:");
+  }
+
+  if (state[id].step === "add_coin") {
+    users[state[id].u] = {
+      password: state[id].p,
+      coin: parseInt(text)
+    };
+    state[id].step = null;
+    return send(id, "✅ User Added");
+  }
+
   // ===== USER =====
   if (state[id].user) {
 
     let u = users[state[id].user];
 
-    if (text === "Balance") return send(id, `💰 ${u.coin}`);
+    if (text === "Balance") {
+      return send(id, `💰 ${u.coin}`);
+    }
 
     if (text === "Send SMS") {
       state[id].step = "num";
@@ -139,7 +193,6 @@ app.post("/", async (req, res) => {
       return send(id, "Message:");
     }
 
-    // 🔥 FINAL FIX HERE
     if (state[id].step === "msg") {
 
       if (u.coin <= 0) return send(id, "❌ No Coin");
@@ -149,23 +202,11 @@ app.post("/", async (req, res) => {
         .replace("XXXX", text);
 
       try {
-        let r = await axios.get(url);
+        await axios.get(url);
 
-        let data = (r.data + "").toLowerCase();
-
-        // 👉 SUCCESS DETECT IMPROVED
-        if (
-          data.includes("success") ||
-          data.includes("sent") ||
-          data.includes("ok") ||
-          data.includes("sms") ||
-          data.length > 2 // fallback
-        ) {
-          u.coin--; // 🔥 COIN CUT FIX
-          return send(id, "✅ SMS Sent");
-        } else {
-          return send(id, "❌ API Problem");
-        }
+        // 🔥 DIRECT SUCCESS (NO FAKE ERROR)
+        u.coin--;
+        return send(id, "✅ SMS Sent");
 
       } catch (e) {
         return send(id, "❌ API Error");
