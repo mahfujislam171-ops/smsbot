@@ -38,7 +38,7 @@ function home(id) {
 
 // ===== ADMIN PANEL =====
 function adminPanel(id) {
-  state[id] = { admin: true };
+  state[id] = { admin: true, step: null };
   send(id, "✅ Admin Panel", [
     ["User Add", "User List"],
     ["User Manage"],
@@ -49,7 +49,7 @@ function adminPanel(id) {
 
 // ===== USER PANEL =====
 function userPanel(id, user) {
-  state[id] = { user };
+  state[id] = { user, step: null };
   send(id, "✅ User Panel", [
     ["Send SMS", "Balance"],
     ["Back"]
@@ -76,7 +76,7 @@ app.post("/", async (req, res) => {
   // ===== START =====
   if (text === "/start") return home(id);
 
-  // ===== BACK =====
+  // ===== BACK FIX (MAIN FIX) =====
   if (text === "Back") {
     if (state[id].admin) return adminPanel(id);
     if (state[id].user) return userPanel(id, state[id].user);
@@ -114,7 +114,7 @@ app.post("/", async (req, res) => {
     return send(id, "❌ Wrong Password");
   }
 
-  // ===== ADMIN FEATURES =====
+  // ===== ADMIN =====
   if (state[id].admin) {
 
     if (text === "User Add") {
@@ -123,9 +123,7 @@ app.post("/", async (req, res) => {
     }
 
     if (text === "User List") {
-      let list = Object.keys(users)
-        .map(u => `${u} (${users[u].coin})`)
-        .join("\n");
+      let list = Object.keys(users).map(u => `${u} (${users[u].coin})`).join("\n");
       return send(id, list || "No users");
     }
 
@@ -133,12 +131,12 @@ app.post("/", async (req, res) => {
       let list = Object.keys(users);
       if (!list.length) return send(id, "No users");
 
-      state[id].step = "select";
+      state[id].step = "select_user";
       return send(id, "Select User:", [...list.map(u => [u]), ["Back"]]);
     }
 
     if (text === "API EDITOR") {
-      state[id].step = "api";
+      state[id].step = "api_menu";
       return send(id, "API Menu", [
         ["Change API", "Balance Link"],
         ["Back"]
@@ -146,12 +144,12 @@ app.post("/", async (req, res) => {
     }
 
     if (text === "PASSWORD CHANGE") {
-      state[id].step = "old";
+      state[id].step = "old_pass";
       return send(id, "Old Password:");
     }
   }
 
-  // ===== ADD USER =====
+  // ===== USER ADD =====
   if (state[id].step === "add_user") {
     state[id].u = text;
     state[id].step = "add_pass";
@@ -169,8 +167,72 @@ app.post("/", async (req, res) => {
       password: state[id].p,
       coin: parseInt(text)
     };
-    state[id].step = null;
-    return send(id, "✅ User Added");
+    return adminPanel(id);
+  }
+
+  // ===== USER MANAGE FIX =====
+  if (state[id].step === "select_user") {
+    if (!users[text]) return send(id, "Invalid user");
+
+    state[id].target = text;
+    state[id].step = "manage_user";
+
+    return send(id, `User: ${text}`, [
+      ["Edit Coin", "Delete"],
+      ["Back"]
+    ]);
+  }
+
+  if (state[id].step === "manage_user" && text === "Delete") {
+    delete users[state[id].target];
+    return adminPanel(id);
+  }
+
+  if (state[id].step === "manage_user" && text === "Edit Coin") {
+    state[id].step = "edit_coin";
+    return send(id, "New coin:");
+  }
+
+  if (state[id].step === "edit_coin") {
+    users[state[id].target].coin = parseInt(text);
+    return adminPanel(id);
+  }
+
+  // ===== API FIX =====
+  if (state[id].step === "api_menu") {
+
+    if (text === "Change API") {
+      state[id].step = "api_set";
+      return send(id, "Send full API link:");
+    }
+
+    if (text === "Balance Link") {
+      return send(id, "https://mahirvai.com/Balance.html");
+    }
+  }
+
+  if (state[id].step === "api_set") {
+    apiLink = text;
+    return adminPanel(id);
+  }
+
+  // ===== PASSWORD FIX =====
+  if (state[id].step === "old_pass") {
+    if (text !== adminPass) return send(id, "Wrong");
+    state[id].step = "new_pass";
+    return send(id, "New password:");
+  }
+
+  if (state[id].step === "new_pass") {
+    state[id].temp = text;
+    state[id].step = "confirm_pass";
+    return send(id, "Confirm:");
+  }
+
+  if (state[id].step === "confirm_pass") {
+    if (text !== state[id].temp) return send(id, "Not match");
+    adminPass = text;
+    return adminPanel(id);
   }
 
   // ===== USER =====
@@ -178,9 +240,7 @@ app.post("/", async (req, res) => {
 
     let u = users[state[id].user];
 
-    if (text === "Balance") {
-      return send(id, `💰 ${u.coin}`);
-    }
+    if (text === "Balance") return send(id, `💰 ${u.coin}`);
 
     if (text === "Send SMS") {
       state[id].step = "num";
@@ -203,12 +263,9 @@ app.post("/", async (req, res) => {
 
       try {
         await axios.get(url);
-
-        // 🔥 DIRECT SUCCESS (NO FAKE ERROR)
         u.coin--;
         return send(id, "✅ SMS Sent");
-
-      } catch (e) {
+      } catch {
         return send(id, "❌ API Error");
       }
     }
