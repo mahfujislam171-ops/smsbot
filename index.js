@@ -13,14 +13,15 @@ let state = {};
 let codes = {};
 let adminPass = "794082";
 
-// ===== SMS API =====
-let apiLink = "https://mahirvai.com/sms.php?key=XXX&number=01XXXXXXXX&msg=XXXX";
+// ===== YOUR API (UNCHANGED) =====
+let apiLink = "https://mahirvai.com/sms.php?key=AM–MRXRPSh2PU&number=01XXXXXXXX&msg=XXXX";
 
 // ===== SEND =====
 function send(id, text, keyboard) {
   axios.post(`${API}/sendMessage`, {
     chat_id: id,
     text: text,
+    parse_mode: "Markdown",
     reply_markup: keyboard
       ? { keyboard, resize_keyboard: true }
       : undefined,
@@ -44,9 +45,11 @@ function home(id) {
 function goBack(id) {
   let page = state[id].page;
 
-  if (page === "admin_menu") return adminMenu(id);
+  if (page === "admin_menu") return home(id);
+  if (page === "admin_login") return home(id);
   if (page === "gen_code") return adminMenu(id);
   if (page === "user_manage") return adminMenu(id);
+  if (page === "user_action") return adminMenu(id);
 
   return home(id);
 }
@@ -75,13 +78,13 @@ app.post("/", async (req, res) => {
   if (!state[id]) state[id] = {};
   if (!users[id]) users[id] = { coin: 0 };
 
-  // ===== START =====
+  // START
   if (text === "/start") return home(id);
 
-  // ===== BACK =====
+  // BACK
   if (text === "Back") return goBack(id);
 
-  // ===== ADMIN LOGIN =====
+  // ADMIN LOGIN
   if (text === "👥 Admin Panel") {
     state[id] = { step: "admin_pass", page: "admin_login" };
     return send(id, "🔐 Enter Admin Password:", [["Back"]]);
@@ -94,7 +97,7 @@ app.post("/", async (req, res) => {
     return adminMenu(id);
   }
 
-  // ===== USER LIST =====
+  // USER LIST
   if (state[id].page === "admin_menu" && text === "👤 User List") {
     let list = Object.keys(users);
 
@@ -125,7 +128,7 @@ app.post("/", async (req, res) => {
     return adminMenu(id);
   }
 
-  // ===== GENERATE CODE =====
+  // GENERATE CODE
   if (state[id].page === "admin_menu" && text === "🎟 Generate Code") {
     state[id] = { page: "gen_code" };
     return send(id, "Enter Coin Amount:", [["Back"]]);
@@ -137,24 +140,22 @@ app.post("/", async (req, res) => {
     if (!amount || amount <= 0)
       return send(id, "❌ Invalid Amount");
 
-    let random = Math.random().toString(36).substring(2, 6).toUpperCase();
-    let code = `TABASSUM-${random}`;
+    let code = "TABASSUM-" + Math.random().toString(36).substring(2, 6).toUpperCase();
 
-    codes[code] = {
-      coin: amount,
-      used: false
-    };
+    codes[code] = { coin: amount, used: false };
 
     state[id].page = "admin_menu";
 
     return send(id,
 `✅ Code Generated
 
-Code: ${code}
-Coin: ${amount}`, [["Back"]]);
+📋 Tap to copy:
+\`${code}\`
+
+💰 Coin: ${amount}`, [["Back"]]);
   }
 
-  // ===== REDEEM =====
+  // REDEEM
   if (text === "💌 Redeem Code") {
     state[id] = { step: "redeem", page: "redeem" };
     return send(id, "Enter Code:", [["Back"]]);
@@ -172,7 +173,7 @@ Coin: ${amount}`, [["Back"]]);
     return send(id, `✅ ${c.coin} Coin Added`);
   }
 
-  // ===== GIFT COIN (FIXED) =====
+  // GIFT COIN
   if (text === "🎁 Gift Coin") {
 
     if (users[id].coin <= 0)
@@ -192,34 +193,31 @@ Coin: ${amount}`, [["Back"]]);
     if (users[id].coin < amount)
       return send(id, "❌ Not Enough Coin");
 
-    // coin deduct
     users[id].coin -= amount;
 
-    let random = Math.random().toString(36).substring(2, 6).toUpperCase();
-    let code = `TABASSUM-${random}`;
+    let code = "TABASSUM-" + Math.random().toString(36).substring(2, 6).toUpperCase();
 
-    codes[code] = {
-      coin: amount,
-      used: false
-    };
+    codes[code] = { coin: amount, used: false };
 
     state[id] = {};
 
     return send(id,
 `🎁 YOUR CODE
 
-Code: ${code}
-Coin: ${amount}`);
+📋 Tap to copy:
+\`${code}\`
+
+💰 Coin: ${amount}`);
   }
 
-  // ===== ACCOUNT =====
+  // ACCOUNT
   if (text === "👤 My Account") {
     return send(id,
 `👤 ID: ${id}
 💰 Balance: ${users[id].coin}`);
   }
 
-  // ===== BONUS =====
+  // BONUS
   if (text === "🎉 Bonus") {
     let now = Date.now();
 
@@ -234,7 +232,7 @@ Coin: ${amount}`);
     return send(id, "🎉 Bonus Added");
   }
 
-  // ===== SMS =====
+  // SMS
   if (text === "📨 Send Custom Sms") {
     state[id] = { step: "num", page: "sms" };
     return send(id, "Enter Number:", [["Back"]]);
@@ -253,7 +251,7 @@ Coin: ${amount}`);
 
     let url = apiLink
       .replace("01XXXXXXXX", state[id].num)
-      .replace("XXXX", text);
+      .replace("XXXX", encodeURIComponent(text));
 
     try {
       await axios.get(url);
@@ -262,7 +260,7 @@ Coin: ${amount}`);
       return send(id, "✅ SMS Sent");
 
     } catch {
-      return send(id, "❌ API Error\ncontact here:@MRX404BYTOWHID 👀");
+      return send(id, "❌ API Error");
     }
   }
 
